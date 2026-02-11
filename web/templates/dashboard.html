@@ -1,0 +1,414 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div style="display: flex; flex-direction: column; gap: 2rem;">
+    
+    <!-- Header -->
+    <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+        <div>
+            <h2 style="margin-bottom: 0.5rem;">Dashboard</h2>
+            <p style="margin-bottom: 0;">Overview of connected clients.</p>
+        </div>
+        <div style="display: flex; gap: 1rem; align-items: center;">
+            <button onclick="fetchClients()" class="btn btn-secondary" style="display: flex; gap: 0.5rem; align-items: center;">
+                <span id="refreshIcon">↻</span> Refresh
+            </button>
+            <span class="badge badge-success" style="font-size: 1rem; padding: 0.5rem 1rem;" id="clientCountBadge">
+                {{ clients|length }} Active Clients
+            </span>
+        </div>
+    </div>
+
+    <!-- Server Management Card -->
+    <div class="card animate-fade-in">
+        <h3 style="margin-bottom: 1.5rem;">Server Management</h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem;">
+            
+            <!-- Version Control -->
+            <div>
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Current Version</label>
+                <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem;">
+                    <input type="text" id="versionInput" class="form-control" value="{{ settings.current_version }}" style="max-width: 150px;">
+                    <button onclick="updateVersion()" class="btn btn-primary">Set Version</button>
+                </div>
+                
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <label class="switch">
+                        <input type="checkbox" id="forceUpdateToggle" {% if settings.force_update %}checked{% endif %} onchange="toggleForceUpdate()">
+                        <span class="slider round"></span>
+                    </label>
+                    <span>Force Update All Clients</span>
+                </div>
+            </div>
+
+            <!-- Upload Update -->
+            <div>
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Upload New Update (.exe)</label>
+                <form id="uploadForm" style="display: flex; gap: 1rem; align-items: center; margin-bottom: 0.5rem;">
+                    <input type="file" id="updateFile" accept=".exe" class="form-control">
+                    <button type="button" onclick="uploadUpdate()" class="btn btn-success">Upload & Publish</button>
+                </form>
+                
+                <!-- Progress Bar -->
+                <div id="uploadProgressContainer" style="display: none; width: 100%; background: rgba(255,255,255,0.1); border-radius: 10px; height: 10px; overflow: hidden; margin-bottom: 0.5rem;">
+                    <div id="uploadProgressBar" style="width: 0%; height: 100%; background: var(--success); transition: width 0.3s;"></div>
+                </div>
+                <small id="uploadStatusText" style="color: var(--text-secondary); display: block;">
+                    Uploading will automatically update the version.
+                </small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Clients List Card -->
+    <div class="card animate-fade-in">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <h3>Connected Clients</h3>
+            <input type="text" id="searchInput" onkeyup="filterTable()" placeholder="Search by ID or IP..." class="form-control" style="max-width: 300px;">
+        </div>
+
+        <div class="table-container">
+            <table class="table" id="clientsTable">
+                <thead>
+                    <tr>
+                        <th onclick="sortTable(0)" style="cursor: pointer;">Client ID ↕</th>
+                        <th onclick="sortTable(1)" style="cursor: pointer;">LOGIN ↕</th>
+                        <th onclick="sortTable(2)" style="cursor: pointer;">Version ↕</th>
+                        <th onclick="sortTable(3)" style="cursor: pointer;">Last Seen (UTC) ↕</th>
+                        <th onclick="sortTable(4)" style="cursor: pointer;">IP Address ↕</th>
+                        <th onclick="sortTable(5)" style="cursor: pointer;">Status ↕</th>
+                    </tr>
+                </thead>
+                <tbody id="clientTableBody">
+                    {% for client in clients %}
+                    <tr>
+                        <td style="font-weight: 500; color: var(--text-primary);">{{ client.client_id }}</td>
+                        <td>{{ client.username or 'Unknown' }}</td>
+                        <td>
+                            <span style="font-family: monospace; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;">
+                                {{ client.version }}
+                            </span>
+                        </td>
+                        <td>{{ client.last_seen.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td>{{ client.ip_address }}</td>
+                        <td>
+                            <span class="badge {{ 'badge-success' if client.status == 'Active' else 'badge-secondary' }}">
+                                {{ client.status }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                            No clients connected yet.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- Auto Update & Client Management ---
+    let socket = io();
+    let clientsData = [];
+
+    // Handle Socket.IO updates
+    socket.on('client_update', function(client) {
+        console.log("Socket.IO update received:", client);
+        
+        // Update local clientsData
+        const index = clientsData.findIndex(c => c.client_id === client.client_id);
+        if (index > -1) {
+            clientsData[index] = client;
+        } else {
+            clientsData.unshift(client);
+        }
+        
+        // Sort clientsData by last_seen
+        clientsData.sort((a, b) => new Date(b.last_seen) - new Date(a.last_seen));
+        
+        // Re-render
+        renderTable(clientsData);
+        
+        // Update badge
+        const badge = document.getElementById('clientCountBadge');
+        if(badge) badge.innerText = clientsData.length + ' Active Clients';
+    });
+
+    // Auto-fetch on load
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchClients();
+        // setInterval(fetchClients, 3000); // No longer needed with Socket.IO
+    });
+
+    async function triggerForceUpdate() {
+        if (!confirm("Are you sure you want to force all clients to update immediately?")) return;
+        
+        try {
+            const res = await fetch('/api/force_update', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({force: true})
+            });
+            const data = await res.json();
+            if (data.status === 'ok') {
+                alert('Force update signal sent to all active clients.');
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Failed to send force update signal.');
+        }
+    }
+
+    async function fetchClients() {
+        console.log("Fetching clients...");
+        const refreshIcon = document.getElementById('refreshIcon');
+        if(refreshIcon) refreshIcon.style.animation = "spin 1s linear infinite";
+        
+        try {
+            const res = await fetch('/api/clients');
+            if (res.status === 401) {
+                window.location.href = '/login'; // Redirect if session expired
+                return;
+            }
+            if (!res.ok) throw new Error(`Server returned ${res.status}`);
+            
+            const data = await res.json();
+            clientsData = data;
+            renderTable(data);
+            
+            // Update badge
+            const badge = document.getElementById('clientCountBadge');
+            if(badge) badge.innerText = data.length + ' Active Clients';
+            
+        } catch (e) {
+            console.error("Failed to fetch clients:", e);
+            // Only alert if manual click (we can't easily distinguish here without params, 
+            // but let's just log to console to avoid annoying popups on interval)
+        } finally {
+            if(refreshIcon) refreshIcon.style.animation = "none";
+        }
+    }
+
+    function renderTable(data) {
+        const tbody = document.getElementById('clientTableBody');
+        tbody.innerHTML = '';
+
+        if (data.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                        No clients connected yet.
+                    </td>
+                </tr>`;
+            return;
+        }
+
+        data.forEach(client => {
+            const row = document.createElement('tr');
+            
+            // Determine status badge class
+            const statusClass = client.status === 'Active' ? 'badge-success' : 'badge-secondary';
+            
+            // Format Date (Simple ISO cleanup)
+            const dateStr = client.last_seen.replace('T', ' ').split('.')[0];
+
+            row.innerHTML = `
+                <td style="font-weight: 500; color: var(--text-primary);">${client.client_id}</td>
+                <td>${client.username || 'Unknown'}</td>
+                <td>
+                    <span style="font-family: monospace; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;">
+                        ${client.version}
+                    </span>
+                </td>
+                <td>${dateStr}</td>
+                <td>${client.ip}</td>
+                <td>
+                    <span class="badge ${statusClass}">
+                        ${client.status}
+                    </span>
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
+        
+        // Re-apply filter if exists
+        filterTable();
+    }
+
+    function filterTable() {
+        const input = document.getElementById('searchInput');
+        const filter = input.value.toUpperCase();
+        const table = document.getElementById('clientsTable');
+        const tr = table.getElementsByTagName('tr');
+
+        for (let i = 1; i < tr.length; i++) { // Start from 1 to skip header
+            let visible = false;
+            const tds = tr[i].getElementsByTagName('td');
+            for (let j = 0; j < tds.length; j++) {
+                if (tds[j]) {
+                    const txtValue = tds[j].textContent || tds[j].innerText;
+                    if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                        visible = true;
+                        break;
+                    }
+                }
+            }
+            tr[i].style.display = visible ? "" : "none";
+        }
+    }
+
+    function sortTable(n) {
+        var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+        table = document.getElementById("clientsTable");
+        switching = true;
+        dir = "asc";
+        
+        while (switching) {
+            switching = false;
+            rows = table.rows;
+            for (i = 1; i < (rows.length - 1); i++) {
+                shouldSwitch = false;
+                x = rows[i].getElementsByTagName("TD")[n];
+                y = rows[i + 1].getElementsByTagName("TD")[n];
+                
+                if (dir == "asc") {
+                    if (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {
+                        shouldSwitch = true;
+                        break;
+                    }
+                } else if (dir == "desc") {
+                    if (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {
+                        shouldSwitch = true;
+                        break;
+                    }
+                }
+            }
+            if (shouldSwitch) {
+                rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+                switching = true;
+                switchcount ++;
+            } else {
+                if (switchcount == 0 && dir == "asc") {
+                    dir = "desc";
+                    switching = true;
+                }
+            }
+        }
+    }
+
+    // Auto-refresh every 30 seconds
+    // setInterval(fetchClients, 30000);
+
+    // Initial fetch to sync state
+    // (Optional, as server already renders first state, but good for consistency)
+    // fetchClients(); 
+
+    // --- Server Management Logic (Existing) ---
+
+    async function updateVersion() {
+        const version = document.getElementById('versionInput').value;
+        try {
+            const res = await fetch('/api/set_version', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({version: version})
+            });
+            const data = await res.json();
+            if(data.status === 'ok') {
+                alert('Version updated to ' + version);
+            }
+        } catch(e) {
+            alert('Error: ' + e);
+        }
+    }
+
+    async function toggleForceUpdate() {
+        const checked = document.getElementById('forceUpdateToggle').checked;
+        try {
+            const res = await fetch('/api/force_update', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({force: checked})
+            });
+            await res.json();
+        } catch(e) {
+            console.error(e);
+            alert('Failed to toggle force update');
+        }
+    }
+
+    async function uploadUpdate() {
+        const fileInput = document.getElementById('updateFile');
+        const version = document.getElementById('versionInput').value;
+        const progressBar = document.getElementById('uploadProgressBar');
+        const progressContainer = document.getElementById('uploadProgressContainer');
+        const statusText = document.getElementById('uploadStatusText');
+        
+        if(!fileInput.files[0]) {
+            alert('Please select a file');
+            return;
+        }
+        
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+        formData.append('version', version);
+        
+        const btn = document.querySelector('button[onclick="uploadUpdate()"]');
+        btn.disabled = true;
+        progressContainer.style.display = 'block';
+        progressBar.style.width = '0%';
+        statusText.innerText = 'Starting upload...';
+
+        const xhr = new XMLHttpRequest();
+        
+        // Track progress
+        xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+                const percent = Math.round((e.loaded / e.total) * 100);
+                progressBar.style.width = percent + '%';
+                statusText.innerText = `Uploading: ${percent}% (${(e.loaded / 1024 / 1024).toFixed(2)} MB / ${(e.total / 1024 / 1024).toFixed(2)} MB)`;
+            }
+        });
+
+        xhr.addEventListener('load', () => {
+            btn.disabled = false;
+            if (xhr.status >= 200 && xhr.status < 300) {
+                const data = JSON.parse(xhr.responseText);
+                statusText.innerText = 'Upload complete! Processing...';
+                alert('Update uploaded successfully!');
+                location.reload();
+            } else {
+                const error = JSON.parse(xhr.responseText);
+                alert('Error: ' + (error.error || 'Unknown error'));
+                progressContainer.style.display = 'none';
+                statusText.innerText = 'Upload failed.';
+            }
+        });
+
+        xhr.addEventListener('error', () => {
+            btn.disabled = false;
+            alert('Upload failed due to network error.');
+            progressContainer.style.display = 'none';
+            statusText.innerText = 'Network error.';
+        });
+
+        xhr.open('POST', '/api/upload_update');
+        xhr.send(formData);
+    }
+</script>
+
+<style>
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
+    th:hover {
+        background-color: rgba(255,255,255,0.05);
+    }
+</style>
+{% endblock %}

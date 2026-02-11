@@ -1,0 +1,1292 @@
+{
+    "id": "33c4dfd7-1f2d-4f68-9fff-a783ba78bad4",
+    "name": "Sanya Dargon",
+    "created_at": "2026-01-08",
+    "starting_amount": 0.0,
+    "settings": {
+        "theme": "dark",
+        "listing_cost": 125.0,
+        "version": "1.0.0",
+        "listing_cost_enabled": false,
+        "orb_effect_date": "2026-01-19",
+        "tab_visible_analytics": true,
+        "tab_visible_cooking": true,
+        "tab_visible_memo": true,
+        "tab_visible_car_rental": true,
+        "rent_show_model": false,
+        "rent_show_plate": false,
+        "rent_show_days": false,
+        "tab_visible_helper": true,
+        "tab_visible_mining": true,
+        "tab_visible_dashboard_tab": false,
+        "tab_visible_analytics_tab": false,
+        "tab_visible_parser_tab": true,
+        "tab_visible_clothes": true,
+        "tab_visible_farm": true,
+        "tab_visible_farm_bp": true,
+        "tab_visible_capital_planning": true,
+        "tab_visible_timers": true,
+        "auto_delete_contracts": false,
+        "contract_notification_mode": "notify_keep",
+        "tab_visible_feedback": true,
+        "window_geometry": "01d9d0cb00030000000000830000001a00000596000002f7000000830000001a00000596000002f700000000000000000600000000830000001a00000596000002f7",
+        "hidden_tabs": []
+    },
+    "car_rental": {
+        "starting_amount": 0.0,
+        "transactions": [
+            {
+                "id": "114520c0-fa2f-430f-9a99-752d331e215a",
+                "date": "08.02.2026",
+                "amount": 123.0,
+                "comment": "",
+                "item_name": "200",
+                "image_path": null
+            },
+            {
+                "id": "83ffd44d-c24c-427f-91dc-c18dbda1320f",
+                "date": "08.02.2026",
+                "amount": -125.0,
+                "comment": "Реклама: 200",
+                "item_name": "200",
+                "image_path": null
+            },
+            {
+                "id": "2c81dce5-8daf-47a3-b565-fc3941339212",
+                "date": "08.02.2026",
+                "amount": -200.0,
+                "comment": "",
+                "item_name": "200",
+                "image_path": null
+            },
+            {
+                "id": "6c6af696-315b-4815-97c3-3bbc65b236ac",
+                "date": "08.02.2026",
+                "amount": 1.0,
+                "comment": "",
+                "item_name": "123",
+                "image_path": null
+            },
+            {
+                "id": "bd65dcb3-e01f-4628-a67b-2def8e240ec6",
+                "date": "08.02.2026",
+                "amount": 123.0,
+                "comment": "",
+                "item_name": "karin",
+                "image_path": null
+            },
+            {
+                "id": "32df67d2-c8fd-4974-bea3-09142e51776b",
+                "date": "08.02.2026",
+                "amount": 222.0,
+                "comment": "",
+                "item_name": "trs",
+                "image_path": null
+            },
+            {
+                "id": "111f7b99-3284-4f88-9184-49040ae78773",
+                "date": "07.02.2026",
+                "amount": 0.0,
+                "comment": "",
+                "item_name": "авм",
+                "image_path": null
+            },
+            {
+                "id": "63e51170-839d-4fc6-a649-74b0ede9dd31",
+                "date": "07.02.2026",
+                "amount": 200.0,
+                "comment": "",
+                "item_name": "karin",
+                "image_path": null
+            },
+            {
+                "id": "a29c113b-b5ba-4286-9d41-f491d0168ebe",
+                "date": "07.02.2026",
+                "amount": 112.0,
+                "comment": "",
+                "item_name": "200",
+                "image_path": null
+            },
+            {
+                "id": "c853bb21-2a50-4b42-b865-c1124a41e3fd",
+                "date": "07.02.2026",
+                "amount": 122.0,
+                "comment": "",
+                "item_name": "",
+                "image_path": null
+            },
+            {
+                "id": "6b6b507d-1f66-4d6a-b528-ac3aa54437d7",
+                "date": "07.02.2026",
+                "amount": 435.0,
+                "comment": "",
+                "item_name": "123",
+                "image_path": null
+            },
+            {
+                "id": "2ac955eb-8da6-4b48-98e8-56096b4f70eb",
+                "date": "07.02.2026",
+                "amount": -125.0,
+                "comment": "Реклама: 123",
+                "item_name": "123",
+                "image_path": null
+            },
+            {
+                "id": "90bc9b13-8d3b-4000-ba3c-50d1ce26c229",
+                "date": "06.02.2026",
+                "amount": 32700.0,
+                "comment": "",
+                "item_name": "lamba",
+                "image_path": null
+            },
+            {
+                "id": "c859a922-43c6-4dbf-8a5e-8b94fbf13712",
+                "date": "04.02.2026",
+                "amount": 2000.0,
+                "comment": "",
+                "item_name": "200",
+                "image_path": null
+            },
+            {
+                "id": "bdc9c7f8-3e45-4dd6-948e-b73c6d4c059c",
+                "date": "01.02.2026",
+                "amount": 2000.0,
+                "comment": "",
+                "item_name": "karin",
+                "image_path": null
+            },
+            {
+                "id": "b0c00d0d-3f83-40a7-a402-004faac7e40a",
+                "date": "31.01.2026",
+                "amount": 1230.0,
+                "comment": "",
+                "item_name": "200",
+                "image_path": null
+            },
+            {
+                "id": "7ee9693f-8d9f-4112-b78c-6674bfc9bb86",
+                "date": "31.01.2026",
+                "amount": -25999.0,
+                "comment": "",
+                "item_name": "ремонт",
+                "image_path": null
+            },
+            {
+                "id": "8f3c285b-be1b-41e4-b9c1-fac66d294a2a",
+                "date": "31.01.2026",
+                "amount": 12350.0,
+                "comment": "",
+                "item_name": "ламба",
+                "image_path": null
+            },
+            {
+                "id": "ee59a9cf-02d3-47fb-86da-cb1f9159c5bd",
+                "date": "28.01.2026",
+                "amount": 122.0,
+                "comment": "",
+                "item_name": "200",
+                "image_path": null
+            },
+            {
+                "id": "da3960bd-4381-4ec7-ab2f-f296e2e70979",
+                "date": "28.01.2026",
+                "amount": 34.0,
+                "comment": "",
+                "item_name": "цуа",
+                "image_path": null,
+                "car_model": "12"
+            },
+            {
+                "id": "09320f4d-0b49-47ef-b61e-0c56467c1075",
+                "date": "23.01.2026",
+                "amount": 1233.0,
+                "comment": "",
+                "item_name": "200",
+                "image_path": null,
+                "rental_days": "2"
+            },
+            {
+                "id": "663c9d59-e00f-4e35-aa22-56e0ca13032b",
+                "date": "20.01.2026",
+                "amount": 200.0,
+                "comment": "",
+                "item_name": "200",
+                "image_path": null
+            }
+        ],
+        "filter_history": [
+            {
+                "start_date": "19.01.2026",
+                "end_date": "19.01.2026",
+                "timestamp": "2026-01-20 02:53:49"
+            },
+            {
+                "start_date": "13.01.2026",
+                "end_date": "20.01.2026",
+                "timestamp": "2026-01-20 02:53:37"
+            }
+        ]
+    },
+    "mining": {
+        "starting_amount": 0.0,
+        "transactions": [
+            {
+                "id": "b0d0a09c-0d94-44f8-96d6-617550dee003",
+                "date": "08.02.2026",
+                "amount": 1000.0,
+                "comment": "",
+                "item_name": "кролик",
+                "image_path": null
+            },
+            {
+                "id": "3f7e1c2f-2e94-4f91-b28c-1215321651e0",
+                "date": "31.01.2026",
+                "amount": 12500.0,
+                "comment": "",
+                "item_name": "пума",
+                "image_path": null
+            },
+            {
+                "id": "e4191a35-15ea-48e2-bb77-12814d7bfb78",
+                "date": "28.01.2026",
+                "amount": 12500.0,
+                "comment": "",
+                "item_name": "пума",
+                "image_path": null
+            }
+        ]
+    },
+    "clothes": {
+        "starting_amount": 0.0,
+        "inventory": [
+            {
+                "id": "26bd155a-c183-4b8d-bf84-315938c704e7",
+                "name": "ваип",
+                "buy_price": 234.0,
+                "date": "2026-01-24",
+                "note": "",
+                "photo_path": null,
+                "status": "active"
+            },
+            {
+                "id": "75d0f629-f202-47ad-8f65-7a6cad247a7b",
+                "name": "Пиджак с рубашкой Модерн",
+                "buy_price": 1200000.0,
+                "date": "2026-01-11",
+                "note": "Продал Васе ",
+                "photo_path": "C:/Users/kaniv/Pictures/Screenshots/Снимок экрана 2026-01-11 171743.png",
+                "status": "active"
+            },
+            {
+                "id": "570228b1-1be6-49f1-9c0f-571e5464214e",
+                "name": "Кросовки T ZIP",
+                "buy_price": 60000.0,
+                "date": "2026-01-11",
+                "note": "",
+                "photo_path": "images/d94f9ccc-e04f-4855-b393-368352892098.png",
+                "status": "active"
+            },
+            {
+                "id": "0af16e74-8ef3-46ea-9882-d0d83d175c0c",
+                "name": "Брюки Guggi Скинни",
+                "buy_price": 650000.0,
+                "date": "2026-01-11",
+                "note": "",
+                "photo_path": "images/24eaf104-9949-4278-8ddf-9d339b375cf4.png",
+                "status": "active"
+            },
+            {
+                "id": "16e5c479-05a7-4fdb-a3f0-e99c107097db",
+                "name": "Кроссовки Nice Airy Plus T",
+                "buy_price": 1250000.0,
+                "date": "2026-01-11",
+                "note": "",
+                "photo_path": "images/bf8de05e-24ac-4e9d-b39d-26159fbde180.png",
+                "status": "active"
+            }
+        ],
+        "sold_history": [
+            {
+                "id": "0a21bfa9-d5cf-4d69-a169-30123108833b",
+                "name": "234",
+                "buy_price": 4.0,
+                "note": "",
+                "photo_path": null,
+                "date_added": "08.02.2026 12:53",
+                "status": "sold",
+                "sell_price": 3.0,
+                "date_sold": "08.02.2026 12:53"
+            },
+            {
+                "id": "1ebdab8c-a701-44dc-a886-cf719fe030d5",
+                "name": "апоа",
+                "buy_price": 645.0,
+                "note": "",
+                "photo_path": null,
+                "date_added": "08.02.2026 12:23",
+                "status": "sold",
+                "sell_price": 223.0,
+                "date_sold": "08.02.2026 12:38"
+            },
+            {
+                "id": "1ab52825-8560-491e-99be-22c21f7cd180",
+                "name": "wefd",
+                "buy_price": 123.0,
+                "date": "2026-01-26",
+                "note": "",
+                "photo_path": "data:image/png;base64,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",
+                "status": "sold",
+                "sell_price": 123.0,
+                "sell_date": "2026-01-26",
+                "date_sold": "08.02.2026 12:37"
+            },
+            {
+                "id": "ddadb316-5200-4cc8-802e-264bfcad70ee",
+                "name": "авп",
+                "buy_price": 3532.0,
+                "note": "",
+                "photo_path": null,
+                "date_added": "08.02.2026 12:23",
+                "status": "sold",
+                "sell_price": 123.0,
+                "date_sold": "08.02.2026 12:28"
+            }
+        ]
+    },
+    "transactions": [
+        {
+            "id": "1efeeaf7-fbbd-4a7c-adc1-cea21550930e",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 часа в онлайне",
+            "item_name": "3 часа в онлайне",
+            "image_path": null
+        },
+        {
+            "id": "3653ed45-33ec-4613-b1b0-2c751ed83823",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 победы в Дэнс Баттлах",
+            "item_name": "3 победы в Дэнс Баттлах",
+            "image_path": null
+        },
+        {
+            "id": "b56ef5a1-d4ef-411e-aa3b-b256b6478ae4",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 победы в Дэнс Баттлах",
+            "item_name": "3 победы в Дэнс Баттлах",
+            "image_path": null
+        },
+        {
+            "id": "52d17b88-013c-43ab-a6a6-6a8e11892050",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 победы в Дэнс Баттлах",
+            "item_name": "3 победы в Дэнс Баттлах",
+            "image_path": null
+        },
+        {
+            "id": "fa72e37c-242e-4e39-bcca-6cecdfcbb1a5",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 победы в Дэнс Баттлах",
+            "item_name": "3 победы в Дэнс Баттлах",
+            "image_path": null
+        },
+        {
+            "id": "e70d0417-6a88-4b6b-b1b5-8613e9f007b3",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 победы в Дэнс Баттлах",
+            "item_name": "3 победы в Дэнс Баттлах",
+            "image_path": null
+        },
+        {
+            "id": "03805f22-c377-4d53-9ad8-394febb187be",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 победы в Дэнс Баттлах",
+            "item_name": "3 победы в Дэнс Баттлах",
+            "image_path": null
+        },
+        {
+            "id": "fe6f9176-e47f-44e8-98a7-afc166c1f27f",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 победы в Дэнс Баттлах",
+            "item_name": "3 победы в Дэнс Баттлах",
+            "image_path": null
+        },
+        {
+            "id": "03201edd-8896-4708-a2bd-0766619a63ea",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 победы в Дэнс Баттлах",
+            "item_name": "3 победы в Дэнс Баттлах",
+            "image_path": null
+        },
+        {
+            "id": "5ca843d6-a5df-41c6-8fed-5cda4174c174",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 победы в Дэнс Баттлах",
+            "item_name": "3 победы в Дэнс Баттлах",
+            "image_path": null
+        },
+        {
+            "id": "374cd868-0a19-4c6d-8fd4-a88359f3fc12",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 победы в Дэнс Баттлах",
+            "item_name": "3 победы в Дэнс Баттлах",
+            "image_path": null
+        },
+        {
+            "id": "98772ceb-cd2f-4362-9714-59ebd9a365f5",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 победы в Дэнс Баттлах",
+            "item_name": "3 победы в Дэнс Баттлах",
+            "image_path": null
+        },
+        {
+            "id": "4fc2dfea-dcd0-4355-b50f-55325558dd15",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 победы в Дэнс Баттлах",
+            "item_name": "3 победы в Дэнс Баттлах",
+            "image_path": null
+        },
+        {
+            "id": "b8274cc6-e6fe-489a-9584-a9e8456fe1a2",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 победы в Дэнс Баттлах",
+            "item_name": "3 победы в Дэнс Баттлах",
+            "image_path": null
+        },
+        {
+            "id": "78ff6d52-8981-415f-a8f5-73e6778a4a12",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 победы в Дэнс Баттлах",
+            "item_name": "3 победы в Дэнс Баттлах",
+            "image_path": null
+        },
+        {
+            "id": "6d17660c-3978-4484-9192-1cad3a4b3aaa",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 победы в Дэнс Баттлах",
+            "item_name": "3 победы в Дэнс Баттлах",
+            "image_path": null
+        },
+        {
+            "id": "a4a773d8-3238-443d-8099-74e0ebccb9cf",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 победы в Дэнс Баттлах",
+            "item_name": "3 победы в Дэнс Баттлах",
+            "image_path": null
+        },
+        {
+            "id": "7a26b1db-2ead-4eda-8a22-607c1b4580f7",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 победы в Дэнс Баттлах",
+            "item_name": "3 победы в Дэнс Баттлах",
+            "image_path": null
+        },
+        {
+            "id": "a566cba6-c778-45d2-a3f0-9cdf98badeca",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 победы в Дэнс Баттлах",
+            "item_name": "3 победы в Дэнс Баттлах",
+            "image_path": null
+        },
+        {
+            "id": "1afceced-7c5a-4cf1-bbf0-641613096865",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 победы в Дэнс Баттлах",
+            "item_name": "3 победы в Дэнс Баттлах",
+            "image_path": null
+        },
+        {
+            "id": "8760a12a-82a8-4928-9b35-0068b1e28dc8",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 победы в Дэнс Баттлах",
+            "item_name": "3 победы в Дэнс Баттлах",
+            "image_path": null
+        },
+        {
+            "id": "d731d27e-f910-4b8b-b737-499b847f3b74",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 победы в Дэнс Баттлах",
+            "item_name": "3 победы в Дэнс Баттлах",
+            "image_path": null
+        },
+        {
+            "id": "8b4be5bb-4378-4e17-b0b8-95e12dffa8bc",
+            "date": "2026-01-10",
+            "amount": 4.0,
+            "comment": "Принять участие в двух аирдропах",
+            "item_name": "Принять участие в двух аирдропах",
+            "image_path": null
+        },
+        {
+            "id": "06622970-f84a-4b0c-9ad6-fe195350746c",
+            "date": "2026-01-10",
+            "amount": 4.0,
+            "comment": "Принять участие в двух аирдропах",
+            "item_name": "Принять участие в двух аирдропах",
+            "image_path": null
+        },
+        {
+            "id": "70320f03-10fe-43fc-9cf9-d2a83cbb19f6",
+            "date": "2026-01-10",
+            "amount": 4.0,
+            "comment": "Принять участие в двух аирдропах",
+            "item_name": "Принять участие в двух аирдропах",
+            "image_path": null
+        },
+        {
+            "id": "2b214b15-3ab4-403d-a626-adc8d188330a",
+            "date": "2026-01-10",
+            "amount": 4.0,
+            "comment": "Принять участие в двух аирдропах",
+            "item_name": "Принять участие в двух аирдропах",
+            "image_path": null
+        },
+        {
+            "id": "b5cbc6be-3655-4b8c-81d3-4cd683c10602",
+            "date": "2026-01-10",
+            "amount": 4.0,
+            "comment": "Принять участие в двух аирдропах",
+            "item_name": "Принять участие в двух аирдропах",
+            "image_path": null
+        },
+        {
+            "id": "f4e7f664-d0ab-4e9f-b00e-3a9da99b58f9",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 победы в Дэнс Баттлах",
+            "item_name": "3 победы в Дэнс Баттлах",
+            "image_path": null
+        },
+        {
+            "id": "f9fa7fb4-283e-4e68-82d9-5d84aaa14075",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 победы в Дэнс Баттлах",
+            "item_name": "3 победы в Дэнс Баттлах",
+            "image_path": null
+        },
+        {
+            "id": "51c51146-1dd3-406e-b134-02fa3fea7247",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 победы в Дэнс Баттлах",
+            "item_name": "3 победы в Дэнс Баттлах",
+            "image_path": null
+        },
+        {
+            "id": "2aadc79e-d79a-4594-868e-0f25bde951e4",
+            "date": "2026-01-10",
+            "amount": 1.0,
+            "comment": "Заказ материалов для бизнеса вручную",
+            "item_name": "Заказ материалов для бизнеса вручную",
+            "image_path": null
+        },
+        {
+            "id": "b1e6895d-ac47-43e2-bd1f-03cc7123a81b",
+            "date": "2026-01-10",
+            "amount": 1.0,
+            "comment": "Заказ материалов для бизнеса вручную",
+            "item_name": "Заказ материалов для бизнеса вручную",
+            "image_path": null
+        },
+        {
+            "id": "9ffd5472-4c59-4e64-812f-614956a53253",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "Нули в казино",
+            "item_name": "Нули в казино",
+            "image_path": null
+        },
+        {
+            "id": "f030e05b-6b70-4d0a-8483-82f8c963f37f",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "25 действий в порту",
+            "item_name": "25 действий в порту",
+            "image_path": null
+        },
+        {
+            "id": "33d3bacc-c365-42ea-8b93-a7534bcc08ca",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "25 действий в шахте",
+            "item_name": "25 действий в шахте",
+            "image_path": null
+        },
+        {
+            "id": "71b5aae6-61b8-4f31-99fe-3dbc4994912d",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 часа в онлайне",
+            "item_name": "3 часа в онлайне",
+            "image_path": null
+        },
+        {
+            "id": "49ccd099-77c6-48b5-95c9-e640beada173",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 часа в онлайне",
+            "item_name": "3 часа в онлайне",
+            "image_path": null
+        },
+        {
+            "id": "992a023b-46da-4b01-8af3-9f718015e5e0",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 часа в онлайне",
+            "item_name": "3 часа в онлайне",
+            "image_path": null
+        },
+        {
+            "id": "3ac00f07-76ff-4412-b3d8-eab4b4708fd3",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 часа в онлайне",
+            "item_name": "3 часа в онлайне",
+            "image_path": null
+        },
+        {
+            "id": "76552ff9-22e3-4c09-95ae-a91ac5419f8b",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 часа в онлайне",
+            "item_name": "3 часа в онлайне",
+            "image_path": null
+        },
+        {
+            "id": "35e7ce4c-35fd-4ef0-a0e7-efe1e4fa7fd1",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 часа в онлайне",
+            "item_name": "3 часа в онлайне",
+            "image_path": null
+        },
+        {
+            "id": "3d50bed7-d421-43a4-b8b2-5b824a51acc0",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 часа в онлайне",
+            "item_name": "3 часа в онлайне",
+            "image_path": null
+        },
+        {
+            "id": "f9fe0355-901e-4f62-b69c-b5890f8455f1",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 часа в онлайне",
+            "item_name": "3 часа в онлайне",
+            "image_path": null
+        },
+        {
+            "id": "47b99319-c92f-4937-ab20-d0eafef4e9ca",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 часа в онлайне",
+            "item_name": "3 часа в онлайне",
+            "image_path": null
+        },
+        {
+            "id": "551f81c4-c32f-41b6-a9b5-22e01ea0b932",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 часа в онлайне",
+            "item_name": "3 часа в онлайне",
+            "image_path": null
+        },
+        {
+            "id": "396f676b-8f95-4a02-a5bd-a80b752a6db4",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 часа в онлайне",
+            "item_name": "3 часа в онлайне",
+            "image_path": null
+        },
+        {
+            "id": "a5a4fcd1-877e-4507-8638-53c284a216ab",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 часа в онлайне",
+            "item_name": "3 часа в онлайне",
+            "image_path": null
+        },
+        {
+            "id": "77f317ec-9f06-4d56-b22d-139e58319c18",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 часа в онлайне",
+            "item_name": "3 часа в онлайне",
+            "image_path": null
+        },
+        {
+            "id": "09f76965-ddb4-4408-96df-7b6e8ded2c86",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 часа в онлайне",
+            "item_name": "3 часа в онлайне",
+            "image_path": null
+        },
+        {
+            "id": "aabb57c7-f90d-4ace-b300-b4dec497d415",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 часа в онлайне",
+            "item_name": "3 часа в онлайне",
+            "image_path": null
+        },
+        {
+            "id": "cc5cab19-29fd-49d8-bbc4-7cece7a17f24",
+            "date": "2026-01-10",
+            "amount": 4.0,
+            "comment": "Запустить переработку обезболивающих в лаборатории",
+            "item_name": "Запустить переработку обезболивающих в лаборатории",
+            "image_path": null
+        },
+        {
+            "id": "ffa2a830-daac-4e8e-b22a-4586243acf7b",
+            "date": "2026-01-10",
+            "amount": 4.0,
+            "comment": "Посадить траву в теплице",
+            "item_name": "Посадить траву в теплице",
+            "image_path": null
+        },
+        {
+            "id": "bedc61dc-54ed-4307-a8b1-99399e1d959a",
+            "date": "2026-01-10",
+            "amount": 1.0,
+            "comment": "Победить в армрестлинге",
+            "item_name": "Победить в армрестлинге",
+            "image_path": null
+        },
+        {
+            "id": "176f2c6a-0e9a-40c3-87e5-2feb51b3b034",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "3 часа в онлайне",
+            "item_name": "3 часа в онлайне",
+            "image_path": null
+        },
+        {
+            "id": "9ae50025-7530-4ec3-bb41-06686a5c55fc",
+            "date": "2026-01-10",
+            "amount": 2.0,
+            "comment": "25 действий на стройке",
+            "item_name": "25 действий на стройке",
+            "image_path": null
+        }
+    ],
+    "item_stats_offsets": {
+        "car_rental": {
+            "G63": {
+                "count": 471
+            },
+            "E60": {
+                "count": 249
+            }
+        }
+    },
+    "farm_bp": {
+        "starting_amount": 0.0,
+        "transactions": [
+            {
+                "id": "c038865a-225d-4792-bd94-7e180b2ef97d",
+                "date": "08.02.2026",
+                "amount": 2.0,
+                "comment": "Нули в казино",
+                "item_name": "Нули в казино",
+                "image_path": null
+            },
+            {
+                "id": "552c5b4a-289c-4db5-b7a5-c2b7b9dd80ad",
+                "date": "08.02.2026",
+                "amount": 2.0,
+                "comment": "25 действий на стройке",
+                "item_name": "25 действий на стройке",
+                "image_path": null
+            },
+            {
+                "id": "9295a802-d049-4890-9743-6a9636aba061",
+                "date": "08.02.2026",
+                "amount": 2.0,
+                "comment": "25 действий в порту",
+                "item_name": "25 действий в порту",
+                "image_path": null
+            },
+            {
+                "id": "ce0dbefe-7d81-427f-860c-b75c9a52c7db",
+                "date": "07.02.2026",
+                "amount": 2.0,
+                "comment": "Нули в казино",
+                "item_name": "Нули в казино",
+                "image_path": null
+            },
+            {
+                "id": "93e711c7-a765-423e-a7cc-b5777d354129",
+                "date": "07.02.2026",
+                "amount": 2.0,
+                "comment": "25 действий на стройке",
+                "item_name": "25 действий на стройке",
+                "image_path": null
+            },
+            {
+                "id": "b83b4040-7293-43ec-b109-790216b7cf71",
+                "date": "06.02.2026",
+                "amount": 2.0,
+                "comment": "3 часа в онлайне",
+                "item_name": "3 часа в онлайне",
+                "image_path": null
+            },
+            {
+                "id": "31d960ca-689c-4f1f-952d-659476de19d2",
+                "date": "06.02.2026",
+                "amount": 1.0,
+                "comment": "Купить лотерейный билет",
+                "item_name": "Купить лотерейный билет",
+                "image_path": null
+            },
+            {
+                "id": "188d09f8-4745-4b86-8a28-b38250945ff5",
+                "date": "01.02.2026",
+                "amount": 2.0,
+                "comment": "5 раз снять 100% шкуру с животных",
+                "item_name": "5 раз снять 100% шкуру с животных",
+                "image_path": null
+            },
+            {
+                "id": "c0620f7b-87f5-4cd9-a96a-d54e6e831af3",
+                "date": "28.01.2026",
+                "amount": 2.0,
+                "comment": "Нули в казино",
+                "item_name": "Нули в казино",
+                "image_path": null
+            },
+            {
+                "id": "48215951-f4e1-45e3-bec0-5267a22ed3b5",
+                "date": "28.01.2026",
+                "amount": 2.0,
+                "comment": "25 действий на стройке",
+                "item_name": "25 действий на стройке",
+                "image_path": null
+            },
+            {
+                "id": "9f8422ce-681b-42ca-bedd-9391cad29ff9",
+                "date": "28.01.2026",
+                "amount": 2.0,
+                "comment": "25 действий в порту",
+                "item_name": "25 действий в порту",
+                "image_path": null
+            },
+            {
+                "id": "22da89db-2d36-4662-b2ff-5fd887000e64",
+                "date": "26.01.2026",
+                "amount": 2.0,
+                "comment": "25 действий в порту",
+                "item_name": "25 действий в порту",
+                "image_path": null
+            },
+            {
+                "id": "a57d882a-c958-4ec3-8cee-5a44eafd63df",
+                "date": "26.01.2026",
+                "amount": 2.0,
+                "comment": "3 часа в онлайне",
+                "item_name": "3 часа в онлайне",
+                "image_path": null
+            },
+            {
+                "id": "9bd0c0a5-d513-4437-a48a-a826361b8ec8",
+                "date": "26.01.2026",
+                "amount": 1.0,
+                "comment": "Выиграть 5 игр в тренировочном комплексе",
+                "item_name": "Выиграть 5 игр в тренировочном комплексе",
+                "image_path": null
+            },
+            {
+                "id": "56422259-603f-41c9-bd91-b976def6596d",
+                "date": "26.01.2026",
+                "amount": 1.0,
+                "comment": "20 подходов в тренажерном зале",
+                "item_name": "20 подходов в тренажерном зале",
+                "image_path": null
+            },
+            {
+                "id": "2ae9d9e1-5b19-41ed-8f14-cf1072462d3a",
+                "date": "26.01.2026",
+                "amount": 3.0,
+                "comment": "Сыграть в мафию в казино",
+                "item_name": "Сыграть в мафию в казино",
+                "image_path": null
+            },
+            {
+                "id": "ac986542-46fb-4e44-b8a3-4653697be3fd",
+                "date": "26.01.2026",
+                "amount": 4.0,
+                "comment": "Выполнить 2 квеста любых клубов",
+                "item_name": "Выполнить 2 квеста любых клубов",
+                "image_path": null
+            },
+            {
+                "id": "7d55f682-eeba-46d3-a04b-30ea416c7ade",
+                "date": "26.01.2026",
+                "amount": 1.0,
+                "comment": "Зайти в любой канал в Brawl",
+                "item_name": "Зайти в любой канал в Brawl",
+                "image_path": null
+            },
+            {
+                "id": "5f9b2704-f1a9-4d96-8066-e91d81c88297",
+                "date": "26.01.2026",
+                "amount": 1.0,
+                "comment": "Поставить лайк любой анкете в Match",
+                "item_name": "Поставить лайк любой анкете в Match",
+                "image_path": null
+            },
+            {
+                "id": "c6cdc652-373f-41fd-bf6d-db5792385f61",
+                "date": "26.01.2026",
+                "amount": 1.0,
+                "comment": "Посетить любой сайт в браузере",
+                "item_name": "Посетить любой сайт в браузере",
+                "image_path": null
+            },
+            {
+                "id": "37dfd5b9-74bc-4406-8d1b-fc4fcaa306da",
+                "date": "24.01.2026",
+                "amount": 1.0,
+                "comment": "Поставить лайк любой анкете в Match",
+                "item_name": "Поставить лайк любой анкете в Match",
+                "image_path": null
+            },
+            {
+                "id": "0963934d-be4f-4c4d-a99d-ebe2d3a8c005",
+                "date": "24.01.2026",
+                "amount": 1.0,
+                "comment": "Зайти в любой канал в Brawl",
+                "item_name": "Зайти в любой канал в Brawl",
+                "image_path": null
+            },
+            {
+                "id": "5be01181-4e28-4585-8582-03684622afae",
+                "date": "24.01.2026",
+                "amount": 1.0,
+                "comment": "Купить лотерейный билет",
+                "item_name": "Купить лотерейный билет",
+                "image_path": null
+            },
+            {
+                "id": "317f3887-dd09-43ea-bf26-94b9d551e054",
+                "date": "24.01.2026",
+                "amount": 1.0,
+                "comment": "Забросить 2 мяча в баскетболе",
+                "item_name": "Забросить 2 мяча в баскетболе",
+                "image_path": null
+            },
+            {
+                "id": "018dc62b-bbaa-4c43-8ba9-4cdee0123c2e",
+                "date": "23.01.2026",
+                "amount": 2.0,
+                "comment": "25 действий на стройке",
+                "item_name": "25 действий на стройке",
+                "image_path": null
+            },
+            {
+                "id": "2d1c84a0-1bf9-4e95-ab38-d2658f4c6fe8",
+                "date": "22.01.2026",
+                "amount": 2.0,
+                "comment": "25 действий в шахте",
+                "item_name": "25 действий в шахте",
+                "image_path": null
+            },
+            {
+                "id": "452f844e-292c-4ea7-9b88-dec330dfe2b5",
+                "date": "21.01.2026",
+                "amount": 2.0,
+                "comment": "Нули в казино",
+                "item_name": "Нули в казино",
+                "image_path": null
+            },
+            {
+                "id": "4f8f7581-2452-4f4b-9858-d9e0fce3e475",
+                "date": "21.01.2026",
+                "amount": 2.0,
+                "comment": "25 действий на стройке",
+                "item_name": "25 действий на стройке",
+                "image_path": null
+            },
+            {
+                "id": "b6594a85-367a-47ad-ac63-1810a3425eb2",
+                "date": "12.01.2026",
+                "amount": 2.0,
+                "comment": "25 действий на стройке",
+                "item_name": "25 действий на стройке",
+                "image_path": null
+            },
+            {
+                "id": "0216980a-22a3-42cb-97df-11968eceade2",
+                "date": "11.01.2026",
+                "amount": 2.0,
+                "comment": "Нули в казино",
+                "item_name": "Нули в казино",
+                "image_path": null
+            },
+            {
+                "id": "57911f91-20a3-440e-a8a6-2c4434020321",
+                "date": "11.01.2026",
+                "amount": 2.0,
+                "comment": "25 действий на стройке",
+                "item_name": "25 действий на стройке",
+                "image_path": null
+            },
+            {
+                "id": "6c92ecb6-8931-4274-a607-06809d508ace",
+                "date": "11.01.2026",
+                "amount": 3.0,
+                "comment": "Ставка в колесе удачи в казино",
+                "item_name": "Ставка в колесе удачи в казино",
+                "image_path": null
+            },
+            {
+                "id": "9ff2ce44-ef5b-4649-9571-c52436bffa8e",
+                "date": "11.01.2026",
+                "amount": 2.0,
+                "comment": "3 часа в онлайне",
+                "item_name": "3 часа в онлайне",
+                "image_path": null
+            },
+            {
+                "id": "8b4be5bb-4378-4e17-b0b8-95e12dffa8bc",
+                "date": "10.01.2026",
+                "amount": 4.0,
+                "comment": "Принять участие в двух аирдропах",
+                "item_name": "Принять участие в двух аирдропах",
+                "image_path": null
+            },
+            {
+                "id": "06622970-f84a-4b0c-9ad6-fe195350746c",
+                "date": "10.01.2026",
+                "amount": 4.0,
+                "comment": "Принять участие в двух аирдропах",
+                "item_name": "Принять участие в двух аирдропах",
+                "image_path": null
+            },
+            {
+                "id": "70320f03-10fe-43fc-9cf9-d2a83cbb19f6",
+                "date": "10.01.2026",
+                "amount": 4.0,
+                "comment": "Принять участие в двух аирдропах",
+                "item_name": "Принять участие в двух аирдропах",
+                "image_path": null
+            },
+            {
+                "id": "2b214b15-3ab4-403d-a626-adc8d188330a",
+                "date": "10.01.2026",
+                "amount": 4.0,
+                "comment": "Принять участие в двух аирдропах",
+                "item_name": "Принять участие в двух аирдропах",
+                "image_path": null
+            },
+            {
+                "id": "b5cbc6be-3655-4b8c-81d3-4cd683c10602",
+                "date": "10.01.2026",
+                "amount": 4.0,
+                "comment": "Принять участие в двух аирдропах",
+                "item_name": "Принять участие в двух аирдропах",
+                "image_path": null
+            },
+            {
+                "id": "cc5cab19-29fd-49d8-bbc4-7cece7a17f24",
+                "date": "10.01.2026",
+                "amount": 4.0,
+                "comment": "Запустить переработку обезболивающих в лаборатории",
+                "item_name": "Запустить переработку обезболивающих в лаборатории",
+                "image_path": null
+            },
+            {
+                "id": "ffa2a830-daac-4e8e-b22a-4586243acf7b",
+                "date": "10.01.2026",
+                "amount": 4.0,
+                "comment": "Посадить траву в теплице",
+                "item_name": "Посадить траву в теплице",
+                "image_path": null
+            },
+            {
+                "id": "bedc61dc-54ed-4307-a8b1-99399e1d959a",
+                "date": "10.01.2026",
+                "amount": 1.0,
+                "comment": "Победить в армрестлинге",
+                "item_name": "Победить в армрестлинге",
+                "image_path": null
+            },
+            {
+                "id": "42905677-fba6-4a9c-85d8-302f824dbab0",
+                "date": "10.01.2026",
+                "amount": 1.0,
+                "comment": "Потушить 25 \"огоньков\" пожарным",
+                "item_name": "Потушить 25 \"огоньков\" пожарным",
+                "image_path": null
+            },
+            {
+                "id": "87731ddc-9d5b-460a-8800-fd6d201c006c",
+                "date": "10.01.2026",
+                "amount": 1.0,
+                "comment": "10 действий на ферме",
+                "item_name": "10 действий на ферме",
+                "image_path": null
+            },
+            {
+                "id": "f17dfe90-9eff-4eb5-8913-e2b3f6590e96",
+                "date": "10.01.2026",
+                "amount": 2.0,
+                "comment": "25 действий на стройке",
+                "item_name": "25 действий на стройке",
+                "image_path": null
+            },
+            {
+                "id": "65ecb3a3-6884-406b-aca9-1fb7dbe9694c",
+                "date": "10.01.2026",
+                "amount": 2.0,
+                "comment": "Нули в казино",
+                "item_name": "Нули в казино",
+                "image_path": null
+            },
+            {
+                "id": "5f539249-3d1a-436e-b3d4-2ea357f76f8e",
+                "date": "10.01.2026",
+                "amount": 2.0,
+                "comment": "3 часа в онлайне",
+                "item_name": "3 часа в онлайне",
+                "image_path": null
+            },
+            {
+                "id": "f0635a96-75df-48b8-a01d-38510348f8a9",
+                "date": "10.01.2026",
+                "amount": 2.0,
+                "comment": "3 часа в онлайне",
+                "item_name": "3 часа в онлайне",
+                "image_path": null
+            },
+            {
+                "id": "452d1dd5-c15f-407b-a96d-9ce250688f19",
+                "date": "10.01.2026",
+                "amount": 1.0,
+                "comment": "Поиграть 1 минуту в волейбол",
+                "item_name": "Поиграть 1 минуту в волейбол",
+                "image_path": null
+            },
+            {
+                "id": "dd2800d7-9046-4cf7-a9c8-3cd09ce15e9b",
+                "date": "10.01.2026",
+                "amount": 1.0,
+                "comment": "Заказ материалов для бизнеса вручную",
+                "item_name": "Заказ материалов для бизнеса вручную",
+                "image_path": null
+            },
+            {
+                "id": "bcfc210e-9690-4b04-a543-c3197fffbdd3",
+                "date": "10.01.2026",
+                "amount": 10.0,
+                "comment": "Прокрутить за DP серебрянный, золотой или driver кейс",
+                "item_name": "Прокрутить за DP серебрянный, золотой или driver кейс",
+                "image_path": null
+            },
+            {
+                "id": "1a9ce0d4-384d-4d0e-9afb-5152614fbba1",
+                "date": "10.01.2026",
+                "amount": 2.0,
+                "comment": "Закрыть 5 кодов в силовых структурах",
+                "item_name": "Закрыть 5 кодов в силовых структурах",
+                "image_path": null
+            },
+            {
+                "id": "00bf9b03-9364-4898-a310-5ad3c9c29aa4",
+                "date": "10.01.2026",
+                "amount": 1.0,
+                "comment": "Поставить на учет 2 автомобиля (для LSPD)",
+                "item_name": "Поставить на учет 2 автомобиля (для LSPD)",
+                "image_path": null
+            },
+            {
+                "id": "66cbb554-a127-4bad-b2c8-77378be2e4ad",
+                "date": "10.01.2026",
+                "amount": 2.0,
+                "comment": "2 круга на любом маршруте автобусника",
+                "item_name": "2 круга на любом маршруте автобусника",
+                "image_path": null
+            },
+            {
+                "id": "595935a0-a55d-49c9-bf85-8825cacd9841",
+                "date": "10.01.2026",
+                "amount": 2.0,
+                "comment": "Два раза оплатить смену внешности у хирурга в EMS",
+                "item_name": "Два раза оплатить смену внешности у хирурга в EMS",
+                "image_path": null
+            },
+            {
+                "id": "66badc71-e783-45ac-a1ea-5ff03ba38a98",
+                "date": "10.01.2026",
+                "amount": 2.0,
+                "comment": "25 действий в порту",
+                "item_name": "25 действий в порту",
+                "image_path": null
+            }
+        ]
+    },
+    "memo": [
+        {
+            "id": "dcee0a59-2f41-4ac9-82d7-c5f4db7d154a",
+            "title": "вым",
+            "headers": [
+                "1",
+                "вам",
+                "вам"
+            ],
+            "items": [
+                {
+                    "id": "74032dc4-befd-432a-9d71-3c0919e517d1",
+                    "values": [
+                        "цу",
+                        "цу",
+                        ""
+                    ],
+                    "image_path": null
+                }
+            ]
+        }
+    ],
+    "capital_planning": {
+        "target_amount": 5000000.0,
+        "target_date": null,
+        "history": [],
+        "settings": {
+            "simplified_mode": false
+        }
+    },
+    "achievements": [
+        "hoarder",
+        "frozen_king",
+        "warehouse_king",
+        "fleet_manager",
+        "lesson_learned"
+    ],
+    "timers": [],
+    "memo_sections": []
+}

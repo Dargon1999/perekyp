@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero-section" style="min-height: 80vh; display: flex; align-items: center; justify-content: center; text-align: center; position: relative; z-index: 1;">
+    <div class="hero-content">
+        <h1 class="animate-fade-in delay-1" style="font-size: 4rem; margin-bottom: 1.5rem; background: linear-gradient(to right, #fff, #94a3b8); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+            Perekyp System
+        </h1>
+        <p class="animate-fade-in delay-2" style="font-size: 1.25rem; max-width: 600px; margin: 0 auto 2.5rem; color: var(--text-secondary);">
+            Advanced monitoring and management solution for client applications. 
+            Secure, reliable, and real-time.
+        </p>
+        
+        {% if not current_user.is_authenticated %}
+            <div class="animate-fade-in delay-3" style="display: flex; gap: 1rem; justify-content: center;">
+                <a class="btn btn-primary" href="{{ url_for('main.login') }}">
+                    Get Started
+                </a>
+                <a class="btn btn-outline" href="{{ url_for('main.register') }}">
+                    Create Account
+                </a>
+            </div>
+        {% else %}
+            <div class="animate-fade-in delay-3">
+                <a class="btn btn-primary" href="{{ url_for('main.dashboard') }}">
+                    Go to Dashboard
+                </a>
+            </div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

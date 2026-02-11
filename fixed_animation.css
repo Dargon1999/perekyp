@@ -1,0 +1,44 @@
+.demo__text {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transform: translateY(20px);
+  will-change: opacity, transform;
+  pointer-events: none;
+}
+
+.demo.s--processing .demo__text {
+  transition: all 0.4s;
+}
+
+.demo__text--step-0 {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.demo__text-dots:before,
+.demo__text-dots:after {
+  content: ".";
+  opacity: 0;
+  animation: dotAnimation 1s infinite;
+}
+
+.demo__text-dots:after {
+  animation-delay: 0.2s;
+}
+
+/* Optimized and merged keyframes */
+@keyframes dotAnimation {
+  0%, 100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+}
