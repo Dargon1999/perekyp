@@ -27,15 +27,12 @@ class AddTimerDialog(StyledDialogBase):
         self.content_layout.addWidget(QLabel("Название таймера:"))
         self.name_input = QLineEdit()
         self.name_input.setPlaceholderText("Оставьте пустым для авто-названия")
-        self.name_input.setMaxLength(30)
+        self.name_input.setMaxLength(100) # Increased to 100
         self.name_input.setAccessibleName("Название таймера")
-        self.name_input.setAccessibleDescription("Введите название таймера или оставьте пустым для автоматического именования")
+        self.name_input.setAccessibleDescription("Введите название таймера (до 100 символов)")
         
-        # Validation: Allow only letters, numbers, spaces, hyphens, underscores, dots
-        regex = QRegularExpression(r"^[\w\s\-\.]+$")
-        validator = QRegularExpressionValidator(regex, self.name_input)
-        self.name_input.setValidator(validator)
-        
+        # Validation: Allow all languages, but prevent XSS by escaping later
+        # We allow almost anything but limit length and escape during save
         self.content_layout.addWidget(self.name_input)
         
         # Type
@@ -196,7 +193,8 @@ class AddTimerDialog(StyledDialogBase):
         timer_type = self.type_combo.currentText()
         
         if raw_name:
-            name = raw_name
+            # Escape HTML characters to prevent basic XSS when rendering in labels
+            name = raw_name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
         else:
             # Contextual default names
             name = timer_type

@@ -3,8 +3,8 @@ from PyQt6.QtWidgets import (
     QMessageBox, QFrame, QButtonGroup, QLabel, QApplication, QScrollArea,
     QSystemTrayIcon, QMenu
 )
-from PyQt6.QtCore import Qt, QTimer, QSize, QPropertyAnimation, QEasingCurve, QParallelAnimationGroup
-from PyQt6.QtGui import QGuiApplication, QIcon, QAction, QCloseEvent
+from PyQt6.QtCore import Qt, QTimer, QSize, QPropertyAnimation, QEasingCurve, QParallelAnimationGroup, QPoint
+from PyQt6.QtGui import QGuiApplication, QIcon, QAction, QCloseEvent, QShortcut, QKeySequence
 import os
 from data_manager import DataManager
 from utils import resource_path
@@ -22,6 +22,7 @@ from gui.tabs.cooking_tab import CookingTab
 from gui.tabs.analytics_tab import AnalyticsTab
 from gui.tabs.capital_planning_tab import CapitalPlanningTab
 from gui.tabs.timers_tab import TimersTab
+from gui.tabs.fishing_tab import FishingTab
 from gui.styles import StyleManager
 from gui.animations import AnimationManager
 from gui.update_manager import UpdateManager
@@ -124,6 +125,7 @@ class MainWindow(QMainWindow):
             "coins": "💰",
             "clock": "🕒",
             "cog": "⚙️",
+            "fish": "🎣",
         }
 
         # Content Layout (Horizontal: Sidebar + Content)
@@ -192,17 +194,88 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(50, self.post_init_setup)
 
         self.restore_window_geometry()
+        self.setup_multi_monitor_support()
+
+    def setup_multi_monitor_support(self):
+        """Setup shortcuts and menu actions for moving window between screens."""
+        # Shortcuts Win+Shift+Left/Right
+        self.shortcut_left = QShortcut(QKeySequence("Win+Shift+Left"), self)
+        self.shortcut_left.activated.connect(self.move_to_prev_screen)
+        
+        self.shortcut_right = QShortcut(QKeySequence("Win+Shift+Right"), self)
+        self.shortcut_right.activated.connect(self.move_to_next_screen)
+        
+        # Add to title bar context menu if possible, or just system menu
+        # Since it's a custom title bar, we might need to add it there
+        if hasattr(self.title_bar, 'contextMenuEvent'):
+            # Custom title bar might have its own menu logic
+            pass
+
+    def move_to_next_screen(self):
+        self.move_to_screen_offset(1)
+
+    def move_to_prev_screen(self):
+        self.move_to_screen_offset(-1)
+
+    def move_to_screen_offset(self, offset):
+        screens = QGuiApplication.screens()
+        if len(screens) < 2:
+            return
+
+        current_screen = self.screen()
+        try:
+            current_index = screens.index(current_screen)
+        except ValueError:
+            current_index = 0
+            
+        next_index = (current_index + offset) % len(screens)
+        target_screen = screens[next_index]
+        
+        # Calculate relative position
+        curr_geo = self.geometry()
+        curr_screen_geo = current_screen.geometry()
+        
+        rel_x = (curr_geo.x() - curr_screen_geo.x()) / curr_screen_geo.width()
+        rel_y = (curr_geo.y() - curr_screen_geo.y()) / curr_screen_geo.height()
+        
+        target_screen_geo = target_screen.geometry()
+        new_x = target_screen_geo.x() + int(rel_x * target_screen_geo.width())
+        new_y = target_screen_geo.y() + int(rel_y * target_screen_geo.height())
+        
+        # Ensure window stays within target screen boundaries
+        new_x = max(target_screen_geo.x(), min(new_x, target_screen_geo.right() - self.width()))
+        new_y = max(target_screen_geo.top(), min(new_y, target_screen_geo.bottom() - self.height()))
+        
+        self.move(new_x, new_y)
+        # Save screen index
+        self.data_manager.set_setting("last_screen_index", next_index)
 
     def restore_window_geometry(self):
         geometry = self.data_manager.get_setting("window_geometry")
+        last_screen_index = self.data_manager.get_setting("last_screen_index")
+        
+        screens = QGuiApplication.screens()
+        
         if geometry:
             self.restoreGeometry(bytes.fromhex(geometry))
+            
+            # Check if we should move to a specific screen
+            if last_screen_index is not None and isinstance(last_screen_index, int):
+                if 0 <= last_screen_index < len(screens):
+                    target_screen = screens[last_screen_index]
+                    # Only move if not already on that screen
+                    if self.screen() != target_screen:
+                        # Move to target screen center if restoreGeometry didn't place it correctly
+                        # or if screen configuration changed
+                        geo = self.frameGeometry()
+                        geo.moveCenter(target_screen.availableGeometry().center())
+                        self.move(geo.topLeft())
         else:
             screen = QGuiApplication.primaryScreen()
             if screen is not None:
                 available = screen.availableGeometry()
                 target_width = min(1300, int(available.width() * 0.9))
-                target_height = min(900, int(available.height() * 0.9))
+                target_height = min(1000, int(available.height() * 0.9))
                 self.resize(target_width, target_height)
                 
                 # Center
@@ -221,6 +294,13 @@ class MainWindow(QMainWindow):
         # 0. Save geometry
         geo = self.saveGeometry().toHex().data().decode()
         self.data_manager.set_setting("window_geometry", geo)
+        
+        # Save current screen index
+        screens = QGuiApplication.screens()
+        try:
+            current_index = screens.index(self.screen())
+            self.data_manager.set_setting("last_screen_index", current_index)
+        except: pass
 
         # 1. Hide and cleanup Tray Icon
         if hasattr(self, 'tray_icon') and self.tray_icon:
@@ -399,11 +479,13 @@ class MainWindow(QMainWindow):
         self.analytics_tab = safe_add_tab(AnalyticsTab, "Аналитика", 7, "chart-bar", "analytics")
         self.capital_planning_tab = safe_add_tab(CapitalPlanningTab, "Капитал", 8, "coins", "capital_planning")
         self.timers_tab = safe_add_tab(TimersTab, "Таймер", 9, "clock", "timers")
-        self.settings_tab = safe_add_tab(SettingsTab, "Настройки", 10, "cog", "settings")
+        self.fishing_tab = safe_add_tab(FishingTab, "Рыбалка", 10, "fish", "fishing")
+        self.settings_tab = safe_add_tab(SettingsTab, "Настройки", 11, "cog", "settings")
         
         # Initial visibility update
         self.update_tabs_visibility()
-        
+
+
     def add_nav_btn(self, text, index, icon_name, key=None):
         icon_char = self.icon_map.get(icon_name, "?")
         btn = NavButton(text, icon_char, index, self.sidebar)
@@ -441,6 +523,10 @@ class MainWindow(QMainWindow):
         current_widget = self.tabs.currentWidget()
         if hasattr(current_widget, "refresh_data"):
             current_widget.refresh_data()
+
+    def open_ai_chat(self):
+        # AI Chat is removed as per requirement
+        pass
 
     def check_license_status(self):
         """Check license status and handle expiration."""

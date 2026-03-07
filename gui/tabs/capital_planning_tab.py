@@ -4,9 +4,10 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
     QProgressBar, QFrame, QGridLayout, QScrollArea, QLineEdit,
     QSlider, QGraphicsDropShadowEffect, QFileDialog, QDialog,
-    QListWidget, QListWidgetItem, QMessageBox
+    QListWidget, QListWidgetItem, QMessageBox, QTableWidget, 
+    QTableWidgetItem, QHeaderView, QTabWidget, QTextEdit, QSizePolicy
 )
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtGui import QColor, QIcon
 
 from gui.custom_dialogs import StyledDialogBase
@@ -222,6 +223,98 @@ class CapitalPlanningTab(QWidget):
         self.init_ui()
         self.is_initialized = False
         # self.refresh_data() # Deferred loading
+        
+        # Connect to data_changed signal for instant updates
+        self.data_manager.data_changed.connect(self.refresh_data)
+        
+        self._rt_timer = QTimer(self)
+        self._rt_timer.timeout.connect(self.update_realtime_goal)
+        self._rt_timer.start(1000)
+
+    def eventFilter(self, obj, event):
+        if obj == self.lbl_current:
+            if event.type() == event.Type.MouseButtonDblClick:
+                allow_edit = self.data_manager.get_setting("allowManualBalanceEdit", False)
+                if allow_edit:
+                    self.start_inline_balance_edit()
+                    return True
+        return super().eventFilter(obj, event)
+
+    def start_inline_balance_edit(self):
+        # Create inline editor
+        self.balance_editor = QLineEdit(self.goal_card)
+        
+        # Validation: Number with 2 decimals, negative allowed
+        from PyQt6.QtGui import QDoubleValidator
+        validator = QDoubleValidator(-1000000000.0, 1000000000.0, 2, self)
+        validator.setNotation(QDoubleValidator.Notation.StandardNotation)
+        self.balance_editor.setValidator(validator)
+        
+        # Style
+        self.balance_editor.setStyleSheet("""
+            QLineEdit {
+                background-color: #1e1e1e;
+                color: #fff;
+                border: 1px solid #3498db;
+                border-radius: 4px;
+                padding: 4px;
+                font-size: 14px;
+                font-weight: bold;
+            }
+        """)
+        
+        # Set current value
+        current_val = self.data_manager.get_total_capital_balance()["liquid_cash"]
+        self.balance_editor.setText(f"{current_val:.2f}")
+        
+        # Position and size - Ensure it's wide enough
+        geo = self.lbl_current.geometry()
+        geo.setWidth(max(geo.width(), 300))
+        self.balance_editor.setGeometry(geo)
+        self.balance_editor.show()
+        self.balance_editor.setFocus()
+        self.balance_editor.selectAll()
+        
+        # Accessibility
+        self.balance_editor.setAccessibleName("Редактирование текущего капитала")
+        
+        # Connect signals
+        self.balance_editor.returnPressed.connect(self.finish_inline_balance_edit)
+        self.balance_editor.editingFinished.connect(self.finish_inline_balance_edit)
+
+    def finish_inline_balance_edit(self):
+        if not hasattr(self, 'balance_editor') or not self.balance_editor:
+            return
+            
+        try:
+            new_val_str = self.balance_editor.text().replace(",", ".")
+            if not new_val_str: return
+            
+            new_val = float(new_val_str)
+            self.update_balance_via_api(new_val)
+        except ValueError:
+            pass
+        finally:
+            if hasattr(self, 'balance_editor') and self.balance_editor:
+                self.balance_editor.deleteLater()
+                self.balance_editor = None
+
+    def update_balance_via_api(self, new_val):
+        profile = self.data_manager.get_active_profile()
+        if not profile: return
+        
+        # Logic to adjust starting_amount so that total liquid_cash equals new_val
+        current_profits = 0.0
+        for cat in ["car_rental", "mining", "farm_bp", "fishing", "clothes", "clothes_new", "cars_trade"]:
+            stats = self.data_manager.get_category_stats(cat)
+            if stats:
+                current_profits += stats.get("pure_profit", 0.0)
+        
+        new_starting = new_val - current_profits
+        profile["starting_amount"] = new_starting
+        self.data_manager.save_data()
+        
+        self.data_manager.data_changed.emit()
 
     def showEvent(self, event):
         if not self.is_initialized:
@@ -259,7 +352,10 @@ class CapitalPlanningTab(QWidget):
         # 3. Smart Advisor
         self.create_advisor_section()
         
-        # 4. Simulator
+        # 4. Transaction Log
+        self.create_log_section()
+        
+        # 5. Simulator
         self.create_simulator_section()
 
     def create_card(self, title, add_shadow=True):
@@ -302,7 +398,8 @@ class CapitalPlanningTab(QWidget):
         # Goal Input
         self.goal_input = QLineEdit()
         self.goal_input.setPlaceholderText("Введите цель ($)")
-        self.goal_input.setFixedWidth(150)
+        self.goal_input.setMinimumWidth(300) # Increased for Task 2
+        self.goal_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.goal_input.setStyleSheet("""
             QLineEdit {
                 background-color: #1e1e1e;
@@ -314,6 +411,7 @@ class CapitalPlanningTab(QWidget):
             }
             QLineEdit:focus { border: 1px solid #3498db; }
         """)
+        self.goal_input.returnPressed.connect(self.save_goal) # Added for Task 4
         
         self.btn_save_goal = QPushButton("Сохранить")
         self.btn_save_goal.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -340,6 +438,7 @@ class CapitalPlanningTab(QWidget):
         # Progress Info
         self.lbl_current = QLabel("Текущий капитал: $0")
         self.lbl_current.setStyleSheet("font-size: 14px; color: #ddd;")
+        self.lbl_current.installEventFilter(self) # For Task 4
         
         self.lbl_remaining = QLabel("Осталось: $0")
         self.lbl_remaining.setStyleSheet("font-size: 14px; color: #ddd;")
@@ -490,6 +589,117 @@ class CapitalPlanningTab(QWidget):
         layout.addWidget(self.advisor_content)
         self.content_layout.addWidget(self.advisor_card)
 
+    def create_log_section(self):
+        self.log_card, layout = self.create_card("📝 Детализированный лог операций")
+        
+        self.log_table = QTableWidget(0, 4)
+        self.log_table.setHorizontalHeaderLabels(["Дата", "Категория", "Описание", "Сумма"])
+        self.log_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.log_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.log_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.log_table.setFixedHeight(300)
+        self.log_table.setStyleSheet("""
+            QTableWidget {
+                background-color: #1e1e1e;
+                color: #eee;
+                gridline-color: #333;
+                border: none;
+                border-radius: 8px;
+            }
+            QHeaderView::section {
+                background-color: #2c3e50;
+                color: white;
+                padding: 5px;
+                border: none;
+                font-weight: bold;
+            }
+        """)
+        
+        layout.addWidget(self.log_table)
+        self.content_layout.addWidget(self.log_card)
+
+    def update_log(self):
+        all_transactions = []
+        profile = self.data_manager.get_active_profile()
+        if not profile: return
+        
+        # 1. Transactions from simple categories
+        category_map = {
+            "car_rental": "Аренда авто",
+            "mining": "Добыча",
+            "farm_bp": "Ферма/БП",
+            "fishing": "Рыбалка"
+        }
+        
+        for cat_key, cat_name in category_map.items():
+            txs = self.data_manager.get_transactions(cat_key)
+            for t in txs:
+                all_transactions.append({
+                    "date": t.get("date"),
+                    "category": cat_name,
+                    "desc": t.get("comment") or t.get("item_name") or "Без описания",
+                    "amount": float(t.get("amount", 0)) - float(t.get("ad_cost", 0))
+                })
+        
+        # 2. Transactions from trade categories
+        trade_map = {
+            "clothes": "Одежда (L)",
+            "clothes_new": "Одежда",
+            "cars_trade": "Перекуп авто"
+        }
+        
+        for cat_key, cat_name in trade_map.items():
+            inv = self.data_manager.get_trade_inventory(cat_key)
+            for item in inv:
+                all_transactions.append({
+                    "date": item.get("date_added", "").split(" ")[0],
+                    "category": f"{cat_name} (Покупка)",
+                    "desc": item.get("name"),
+                    "amount": -float(item.get("buy_price", 0))
+                })
+            
+            sold = self.data_manager.get_trade_sold(cat_key)
+            for item in sold:
+                # Add buy expense
+                all_transactions.append({
+                    "date": item.get("date_added", "").split(" ")[0],
+                    "category": f"{cat_name} (Покупка)",
+                    "desc": item.get("name"),
+                    "amount": -float(item.get("buy_price", 0))
+                })
+                # Add sell income
+                all_transactions.append({
+                    "date": item.get("date_sold", item.get("date_added", "")).split(" ")[0],
+                    "category": f"{cat_name} (Продажа)",
+                    "desc": item.get("name"),
+                    "amount": float(item.get("sell_price", 0))
+                })
+
+        # Sort by date (descending)
+        def parse_date(d_str):
+            try:
+                return datetime.strptime(d_str, "%d.%m.%Y")
+            except:
+                return datetime.min
+
+        all_transactions.sort(key=lambda x: parse_date(x["date"]), reverse=True)
+        
+        # Limit to 50 for performance
+        display_txs = all_transactions[:50]
+        
+        self.log_table.setRowCount(len(display_txs))
+        for i, t in enumerate(display_txs):
+            self.log_table.setItem(i, 0, QTableWidgetItem(t["date"]))
+            self.log_table.setItem(i, 1, QTableWidgetItem(t["category"]))
+            self.log_table.setItem(i, 2, QTableWidgetItem(t["desc"]))
+            
+            amt_item = QTableWidgetItem(f"${t['amount']:,.2f}")
+            if t["amount"] < 0:
+                amt_item.setForeground(QColor("#e74c3c"))
+            else:
+                amt_item.setForeground(QColor("#2ecc71"))
+            self.log_table.setItem(i, 3, amt_item)
+
     def create_simulator_section(self):
         self.simulator_card, layout = self.create_card("🧪 Симулятор «А что если?»")
         
@@ -540,24 +750,9 @@ class CapitalPlanningTab(QWidget):
     # --- Logic ---
 
     def calculate_net_worth(self):
-        """Calculates total liquid cash + inventory value."""
-        total = 0.0
-        
-        # Clothes
-        clothes_stats = self.data_manager.get_category_stats("clothes")
-        # Net Worth = Current Balance (Liquid) + Inventory Value (Assets @ Buy Price)
-        inventory_value = sum(float(item.get("buy_price", 0)) for item in self.data_manager.get_clothes_inventory())
-        total += clothes_stats.get("current_balance", 0) + inventory_value
-        
-        # Car Rental
-        rental_stats = self.data_manager.get_category_stats("car_rental")
-        total += rental_stats.get("current_balance", 0)
-        
-        # Mining
-        mining_stats = self.data_manager.get_category_stats("mining")
-        total += mining_stats.get("current_balance", 0)
-        
-        return total
+        """Calculates total net worth (Liquid Cash + Assets)."""
+        balances = self.data_manager.get_total_capital_balance()
+        return balances["net_worth"]
 
     def refresh_data(self):
         planning_data = self.data_manager.get_capital_planning_data()
@@ -569,14 +764,21 @@ class CapitalPlanningTab(QWidget):
         if not self.goal_input.hasFocus():
             self.goal_input.setText(str(int(target)) if target else "")
         
-        current_capital = self.calculate_net_worth()
-        self.lbl_current.setText(f"Текущий капитал: ${current_capital:,.2f}")
+        balances = self.data_manager.get_total_capital_balance()
+        current_capital = balances["liquid_cash"]
+        self.lbl_current.setText(f"Текущий баланс: ${int(current_capital)}")
+        
+        # Add Net Worth info
+        net_worth = balances["net_worth"]
+        # If there's inventory, show it
+        if net_worth > current_capital:
+            self.lbl_current.setToolTip(f"Общий капитал (вкл. товары): ${int(net_worth)}")
         
         if target > 0:
             remaining = max(0, target - current_capital)
             progress = min(100, (current_capital / target) * 100) if target else 0
             
-            self.lbl_remaining.setText(f"Осталось: ${remaining:,.2f}")
+            self.lbl_remaining.setText(f"Осталось: ${int(remaining)}")
             self.progress_bar.setValue(int(progress))
             
             # Prediction logic
@@ -596,6 +798,7 @@ class CapitalPlanningTab(QWidget):
         # 2. DNA & Stats
         self.analyze_dna()
         self.update_advisor()
+        self.update_log()
         
         # 3. Simulator (Init)
         if not self.sim_invest.text():
@@ -603,6 +806,55 @@ class CapitalPlanningTab(QWidget):
 
         # 4. Check Achievements
         self.check_achievements()
+
+    def _profit_for_category(self, category):
+        stats = self.data_manager.get_category_stats(category)
+        if not stats:
+            return 0.0
+        return float(stats.get("income", 0.0)) - float(stats.get("expenses", 0.0))
+
+    def _profit_fishing(self):
+        txs = self.data_manager.get_transactions("fishing")
+        inc = sum(float(t.get("amount", 0.0)) for t in txs if float(t.get("amount", 0.0)) > 0)
+        exp = sum(abs(float(t.get("amount", 0.0))) for t in txs if float(t.get("amount", 0.0)) < 0)
+        return inc - exp
+
+    def compute_tabs_profit(self):
+        total = 0.0
+        # Аренда авто, Добыча
+        total += self._profit_for_category("car_rental")
+        total += self._profit_for_category("mining")
+        # Покупка-продажа (одежда/авто)
+        for cat in ["clothes", "clothes_new", "cars_trade"]:
+            stats = self.data_manager.get_category_stats(cat)
+            if stats:
+                total += float(stats.get("income", 0.0)) - float(stats.get("expenses", 0.0))
+        # Рыбалка
+        total += self._profit_fishing()
+        return round(total)
+
+    def update_realtime_goal(self):
+        planning_data = self.data_manager.get_capital_planning_data()
+        target = float(planning_data.get("target_amount", 0.0)) if planning_data else 0.0
+        
+        balances = self.data_manager.get_total_capital_balance()
+        current_cash = balances["liquid_cash"]
+        
+        remaining = max(0, round(target - current_cash))
+        progress = 0
+        if target > 0:
+            progress = min(100, int((current_cash / target) * 100))
+            
+        self.lbl_remaining.setText(f"Осталось: ${int(remaining)}")
+        self.progress_bar.setValue(progress)
+        self.lbl_current.setText(f"Текущий баланс: ${int(current_cash)}")
+        
+        if remaining <= 0 and target > 0:
+            self.lbl_prediction.setText("🎉 Цель достигнута! Отличная работа.")
+        elif target <= 0:
+            self.lbl_prediction.setText("Установите цель, чтобы увидеть прогресс.")
+        else:
+            self.lbl_prediction.setText("⏳ Пересчёт в реальном времени активен.")
 
     def toggle_focus_mode(self):
         enabled = self.btn_focus.isChecked()
@@ -1043,7 +1295,6 @@ class CapitalPlanningTab(QWidget):
         layout.addWidget(lbl_title)
         
         # Tabs
-        from PyQt6.QtWidgets import QTabWidget, QTextEdit
         tabs = QTabWidget()
         tabs.setStyleSheet("""
             QTabWidget::pane { border: 1px solid #444; }

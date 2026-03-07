@@ -153,6 +153,9 @@ class TradeItemWidget(QWidget):
         # Right Panel (Inventory/Sold)
         self.setup_right_panel()
         
+        # Connect to data_changed signal
+        self.data_manager.data_changed.connect(self.refresh_data)
+        
         self.is_initialized = False
         # self.refresh_data() # Deferred
 
@@ -180,6 +183,7 @@ class TradeItemWidget(QWidget):
         
         self.name_input.setStyleSheet(input_style)
         self.price_input.setStyleSheet(input_style)
+        self.appearance_price_input.setStyleSheet(input_style)
         self.note_input.setStyleSheet(input_style + "padding-top: 10px;")
         
         self.image_label.setStyleSheet(f"border: 2px dashed {t['border']}; border-radius: 10px; color: {t['text_secondary']}; background-color: {t['input_bg']};")
@@ -227,6 +231,10 @@ class TradeItemWidget(QWidget):
             }}
         """)
         
+        # Toggle appearance price input visibility
+        show_coa = self.data_manager.get_setting("showCostOfAppearance", False)
+        self.appearance_price_input.setVisible(show_coa)
+        
         self.refresh_data()
 
     def setup_left_panel(self):
@@ -256,6 +264,10 @@ class TradeItemWidget(QWidget):
         self.price_input.setPlaceholderText("Цена покупки ($)")
         self.price_input.setFixedHeight(40)
         
+        self.appearance_price_input = QLineEdit()
+        self.appearance_price_input.setPlaceholderText("Стоимость появления ($)")
+        self.appearance_price_input.setFixedHeight(40)
+        
         self.note_input = QTextEdit()
         self.note_input.setPlaceholderText("Примечание...")
         self.note_input.setMaximumHeight(100)
@@ -268,6 +280,7 @@ class TradeItemWidget(QWidget):
         layout.addWidget(self.image_label)
         layout.addWidget(self.name_input)
         layout.addWidget(self.price_input)
+        layout.addWidget(self.appearance_price_input)
         layout.addWidget(self.note_input)
         layout.addWidget(self.save_btn)
         layout.addStretch()
@@ -431,6 +444,7 @@ class TradeItemWidget(QWidget):
     def save_item(self):
         name = self.name_input.text()
         price = self.price_input.text()
+        coa_price = self.appearance_price_input.text() or "0"
         note = self.note_input.toPlainText()
         
         if not name or not price:
@@ -438,18 +452,30 @@ class TradeItemWidget(QWidget):
             return
         try:
             float(price)
+            float(coa_price)
         except ValueError:
             AlertDialog(self, "Ошибка", "Цена должна быть числом", "ОК").exec()
             return
         
         # Use generic method
-        self.data_manager.add_trade_item(self.category_key, name, price, note, self.current_image_path)
+        self.data_manager.add_trade_item(
+            self.category_key, name, price, note, 
+            self.current_image_path, coa_price=coa_price
+        )
         
         self.name_input.clear()
         self.price_input.clear()
+        self.appearance_price_input.clear()
         self.note_input.clear()
         self.set_preview_image(None)
         self.image_label.setText("Ctrl+V для вставки\nДвойной клик для выбора файла")
+        
+        # Reset ad cost if enabled (Task 3)
+        if self.data_manager.get_setting("listing_cost_enabled", True):
+            ad_cost = self.data_manager.get_setting("listing_cost", 0.0)
+            if ad_cost > 0:
+                self.appearance_price_input.setText(str(ad_cost))
+                
         self.refresh_data()
 
     def refresh_data(self):
@@ -464,6 +490,18 @@ class TradeItemWidget(QWidget):
         self.update_inventory_list()
         self.update_sold_list()
 
+        # Auto-fill and dynamic visibility for ad cost (Task 1)
+        is_ad_cost_enabled = self.data_manager.get_setting("listing_cost_enabled", True)
+        
+        # Ensure it's explicitly shown/hidden
+        if is_ad_cost_enabled:
+            self.appearance_price_input.show()
+            ad_cost = self.data_manager.get_setting("listing_cost", 0.0)
+            if ad_cost > 0 and not self.appearance_price_input.text():
+                self.appearance_price_input.setText(str(ad_cost))
+        else:
+            self.appearance_price_input.hide()
+
     def update_inventory_list(self):
         # Clear layout
         while self.inventory_layout.count():
@@ -471,6 +509,10 @@ class TradeItemWidget(QWidget):
             if child.widget(): child.widget().deleteLater()
             
         items = self.data_manager.get_trade_inventory(self.category_key)
+        show_coa = self.data_manager.get_setting("showCostOfAppearance", False)
+        
+        # Check if we should show buy_price (Task 4)
+        show_buy_price = self.data_manager.get_setting("showBuyPriceInInventory", True)
         
         for item in items:
             row = QFrame()
@@ -488,10 +530,27 @@ class TradeItemWidget(QWidget):
             info_layout = QVBoxLayout()
             name_lbl = QLabel(item.get("name"))
             name_lbl.setStyleSheet("font-weight: bold; font-size: 14px;")
-            price_lbl = QLabel(f"Куплено за: ${float(item.get('buy_price', 0)):,.2f}")
             info_layout.addWidget(name_lbl)
-            info_layout.addWidget(price_lbl)
+            
+            if show_buy_price:
+                price_text = f"Куплено за: ${float(item.get('buy_price', 0)):,.2f}"
+                price_lbl = QLabel(price_text)
+                info_layout.addWidget(price_lbl)
+            
             row_layout.addLayout(info_layout)
+            
+            # Cost of Appearance Column (Task 2)
+            if show_coa:
+                coa_layout = QVBoxLayout()
+                coa_val = float(item.get('cost_of_appearance', 0))
+                coa_lbl_title = QLabel("Стоимость появления")
+                coa_lbl_title.setStyleSheet("font-size: 11px; color: #7f8c8d;")
+                coa_lbl_val = QLabel(f"${coa_val:,.2f}")
+                coa_lbl_val.setStyleSheet("font-weight: bold; font-size: 13px; color: #f1c40f;")
+                coa_layout.addWidget(coa_lbl_title)
+                coa_layout.addWidget(coa_lbl_val)
+                row_layout.insertSpacing(2, 40)
+                row_layout.addLayout(coa_layout)
             
             row_layout.addStretch()
             
@@ -579,9 +638,18 @@ class TradeItemWidget(QWidget):
             info_layout.addWidget(name_lbl)
             
             profit = float(item.get("sell_price", 0)) - float(item.get("buy_price", 0))
+            show_coa = self.data_manager.get_setting("showCostOfAppearance", False)
+            if show_coa:
+                profit -= float(item.get("cost_of_appearance", 0))
+                
             color = "#2ecc71" if profit >= 0 else "#e74c3c"
             
-            price_info = QLabel(f"Прод: ${float(item.get('sell_price', 0)):,.2f}")
+            price_info_text = f"Прод: ${float(item.get('sell_price', 0)):,.2f}"
+            if show_coa:
+                coa = float(item.get('cost_of_appearance', 0))
+                price_info_text += f" | Появ: ${coa:,.2f}"
+                
+            price_info = QLabel(price_info_text)
             price_info.setStyleSheet("color: #aaa; font-size: 12px;")
             info_layout.addWidget(price_info)
 
@@ -605,6 +673,7 @@ class TradeItemWidget(QWidget):
             price = dlg.get_value()
             if price:
                 self.data_manager.sell_trade_item(self.category_key, item["id"], price)
+                self.data_manager.data_changed.emit() # Force analytics cache refresh
                 self.refresh_data()
 
     def delete_item(self, item_id, is_sold):

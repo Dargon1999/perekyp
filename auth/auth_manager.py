@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 class AuthManager:
     def __init__(self, server_url=None):
         # Config from User
+        # TODO: SECURITY RISK - API Key is hardcoded. Use environment variables or a secure backend proxy.
         self.api_key = "AIzaSyAps_XRnofsuusFDXD6cxDWTnk0bJ0kUaE"
         self.project_id = "generatormail-e478c"
         self.base_url = f"https://firestore.googleapis.com/v1/projects/{self.project_id}/databases/(default)/documents"
@@ -75,6 +76,8 @@ class AuthManager:
                 if stored_hwid != self.hwid:
                     logger.warning(f"HWID mismatch: stored={stored_hwid}, current={self.hwid}")
                     return False, "Ключ уже активирован на другом ПК", None
+                # TODO: SECURITY RISK - Passwords are compared client-side! This implies plaintext storage in DB.
+                # Refactor to use server-side validation (e.g., Firebase Auth or salted hashes).
                 if stored_login and (stored_login != login or stored_password != password):
                     logger.warning("Login/Password mismatch")
                     return False, "Неверный логин или пароль для этого ключа", None
@@ -162,7 +165,7 @@ class AuthManager:
         )
 
     def check_grace_period(self, login, password, key):
-        """Allows login if offline but within 24 hours of last successful login."""
+        """Allows login if offline but within 72 hours of last successful login."""
         session = self.load_session()
         if not session:
              return False, "Нет связи с сервером (Firebase) и нет сохраненной сессии", None
@@ -175,12 +178,13 @@ class AuthManager:
         if last_login_str:
             try:
                 last_login = datetime.fromisoformat(last_login_str)
-                if (datetime.now() - last_login).total_seconds() < 24 * 3600:
-                    return True, "Офлайн режим (Grace Period)", "Offline (24h)"
+                # Grace period extended to 72 hours
+                if (datetime.now() - last_login).total_seconds() < 72 * 3600:
+                    return True, "Офлайн режим (Grace Period)", "Offline (72h)"
             except:
                 pass
         
-        return False, "Срок офлайн доступа (24ч) истек. Подключитесь к интернету.", None
+        return False, "Срок офлайн доступа (72ч) истек. Подключитесь к интернету.", None
 
     def save_session(self, login, password, key):
         """Saves successful login to auto-fill next time."""

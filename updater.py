@@ -100,13 +100,14 @@ def update_and_restart(target_exe, update_file, pid_to_wait):
             try:
                 # 1. Backup existing file
                 backup_file = target_exe + ".bak"
+                # If backup exists, try to remove it first to avoid permission issues
+                if os.path.exists(backup_file):
+                    try:
+                        os.remove(backup_file)
+                    except OSError:
+                        pass
+
                 if os.path.exists(target_exe):
-                    if os.path.exists(backup_file):
-                        try:
-                            os.remove(backup_file)
-                        except OSError:
-                            logging.warning("Could not remove old backup. overwriting...")
-                    
                     try:
                         os.rename(target_exe, backup_file)
                     except OSError as e:
@@ -124,9 +125,6 @@ def update_and_restart(target_exe, update_file, pid_to_wait):
                     if os.path.exists(target_exe) and os.path.getsize(target_exe) > 0:
                         logging.info("File replaced successfully.")
                         success = True
-                        
-                        # We keep the backup for safety until successful launch (which we can't verify here easily)
-                        # But we can leave it.
                         break
                     else:
                         raise Exception("Move appeared successful but target file is missing or empty.")

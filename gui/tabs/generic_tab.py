@@ -25,6 +25,9 @@ class GenericTab(QWidget):
         self.setup_table()
         self.setup_footer()
         
+        # Connect to data_changed signal for instant updates
+        self.data_manager.data_changed.connect(self.refresh_data)
+        
         # 4. Footer Add Button
         t = StyleManager.get_theme(self.current_theme)
         self.add_btn.setStyleSheet(f"""
@@ -191,10 +194,23 @@ class GenericTab(QWidget):
         # Styles applied in apply_theme
         self.stats_btn.clicked.connect(self.open_item_stats_dialog)
 
-        self.export_btn = QPushButton("📥 Excel")
+        self.export_btn = QPushButton("📥 Экспорт")
         self.export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.export_btn.setToolTip("Экспорт в Excel")
-        self.export_btn.clicked.connect(self.export_data)
+        self.export_btn.setToolTip("Экспорт в Excel/CSV")
+        
+        from PyQt6.QtWidgets import QMenu
+        from PyQt6.QtGui import QAction
+        
+        export_menu = QMenu(self)
+        excel_act = QAction("Excel (.xlsx)", self)
+        csv_act = QAction("CSV (.csv)", self)
+        
+        excel_act.triggered.connect(self.export_to_excel)
+        csv_act.triggered.connect(self.export_to_csv)
+        
+        export_menu.addAction(excel_act)
+        export_menu.addAction(csv_act)
+        self.export_btn.setMenu(export_menu)
 
         self.header_layout.addWidget(self.filter_combo)
         self.header_layout.addWidget(self.date_start)
@@ -271,24 +287,129 @@ class GenericTab(QWidget):
         stats_layout.addWidget(self.stat_balance)
         
         self.layout.addLayout(stats_layout)
+        
+        # Connect Double Click for manual balance edit
+        self.stat_balance.value_label.installEventFilter(self)
 
-    def create_stat_card(self, title, value, color="#ffffff"):
+    def eventFilter(self, obj, event):
+        if hasattr(self, 'stat_balance') and obj == self.stat_balance.value_label:
+            if event.type() == event.Type.MouseButtonDblClick:
+                allow_edit = self.data_manager.get_setting("allowManualBalanceEdit", False)
+                if allow_edit:
+                    self.start_inline_balance_edit()
+                    return True
+        return super().eventFilter(obj, event)
+
+    def start_inline_balance_edit(self):
+        # Create inline editor
+        self.balance_editor = QLineEdit(self.stat_balance)
+        
+        # Validation: Number with 2 decimals, negative allowed
+        from PyQt6.QtGui import QDoubleValidator
+        validator = QDoubleValidator(-1000000000.0, 1000000000.0, 2, self)
+        validator.setNotation(QDoubleValidator.Notation.StandardNotation)
+        self.balance_editor.setValidator(validator)
+        
+        # Style
+        t = StyleManager.get_theme(self.current_theme)
+        self.balance_editor.setStyleSheet(f"""
+            background-color: {t['input_bg']};
+            color: {t['text_main']};
+            border: 1px solid {t['accent']};
+            border-radius: 4px;
+            font-size: 18px;
+            font-weight: bold;
+        """)
+        
+        # Set current value
+        current_val = self.data_manager.get_total_capital_balance()["liquid_cash"]
+        self.balance_editor.setText(f"{current_val:.2f}")
+        
+        # Position and size - Ensure it's wide enough
+        geo = self.stat_balance.value_label.geometry()
+        geo.setWidth(max(geo.width(), 150))
+        self.balance_editor.setGeometry(geo)
+        self.balance_editor.show()
+        self.balance_editor.setFocus()
+        self.balance_editor.selectAll()
+        
+        # Accessibility
+        self.balance_editor.setAccessibleName("Редактирование баланса")
+        
+        # Connect signals
+        self.balance_editor.returnPressed.connect(self.finish_inline_balance_edit)
+        self.balance_editor.editingFinished.connect(self.finish_inline_balance_edit)
+
+    def finish_inline_balance_edit(self):
+        if not hasattr(self, 'balance_editor') or not self.balance_editor:
+            return
+            
+        try:
+            new_val_str = self.balance_editor.text().replace(",", ".")
+            if not new_val_str: return
+            
+            new_val = float(new_val_str)
+            self.update_balance_via_api(new_val)
+        except ValueError:
+            pass
+        finally:
+            if hasattr(self, 'balance_editor') and self.balance_editor:
+                self.balance_editor.deleteLater()
+                self.balance_editor = None
+
+    def update_balance_via_api(self, new_val):
+        profile = self.data_manager.get_active_profile()
+        if not profile: return
+        
+        # Logic to adjust starting_amount so that total liquid_cash equals new_val
+        current_profits = 0.0
+        for cat in ["car_rental", "mining", "farm_bp", "fishing", "clothes", "clothes_new", "cars_trade"]:
+            stats = self.data_manager.get_category_stats(cat)
+            if stats:
+                current_profits += stats.get("pure_profit", 0.0)
+        
+        new_starting = new_val - current_profits
+        profile["starting_amount"] = new_starting
+        self.data_manager.save_data()
+        
+        self.data_manager.data_changed.emit()
+        # No message box for inline edit, just refresh
+        # QMessageBox.information(self, "Успех", f"Баланс обновлен до ${new_val:,.2f}")
+
+    def create_stat_card(self, title, value, color=None):
         frame = QFrame()
         frame.setObjectName("StatCard")
-        # Styles applied in apply_theme
+        t = StyleManager.get_theme(self.current_theme)
+        
+        # Determine background color for special cards
+        bg_color = t['bg_secondary']
+        
+        frame.setStyleSheet(f"""
+            QFrame#StatCard {{
+                background-color: {bg_color};
+                border: 1px solid {t['border']};
+                border-radius: 12px;
+                min-width: 220px;
+            }}
+        """)
         
         layout = QVBoxLayout(frame)
+        layout.setContentsMargins(15, 12, 15, 12)
         
-        title_lbl = QLabel(title)
-        # Styles applied in apply_theme
+        title_label = QLabel(title)
+        title_label.setStyleSheet(f"color: {t['text_secondary']}; font-size: 13px; font-weight: 600;")
+        layout.addWidget(title_label)
         
-        value_lbl = QLabel(value)
-        value_lbl.setStyleSheet(f"color: {color}; font-size: 24px; font-weight: bold; margin-top: 5px;")
+        value_label = QLabel(value)
+        val_color = color if color else t['text_main']
+        value_label.setStyleSheet(f"color: {val_color}; font-size: 22px; font-weight: 800;")
+        value_label.setWordWrap(False) # Prevent wrapping
+        layout.addWidget(value_label)
         
-        layout.addWidget(title_lbl)
-        layout.addWidget(value_lbl)
+        # Attach labels to frame for access
+        frame.title_label = title_label
+        frame.value_label = value_label
         
-        frame.value_label = value_lbl
         return frame
 
     def setup_table(self):
@@ -327,17 +448,42 @@ class GenericTab(QWidget):
         
         self.layout.addLayout(footer_layout)
 
-    def export_data(self):
+    def export_to_excel(self):
         file_path, _ = QFileDialog.getSaveFileName(self, "Экспорт в Excel", "", "Excel Files (*.xlsx)")
         if file_path:
             if not file_path.endswith('.xlsx'):
                 file_path += '.xlsx'
             
-            success = self.data_manager.export_to_excel(self.category, file_path)
-            if success:
+            # Using data_manager's existing method if it has one, or implement here
+            try:
+                import pandas as pd
+                txs = self.data_manager.get_transactions(self.category)
+                df = pd.DataFrame(txs)
+                df.to_excel(file_path, index=False)
                 QMessageBox.information(self, "Успех", f"Данные успешно экспортированы в\n{file_path}")
-            else:
-                QMessageBox.warning(self, "Ошибка", "Не удалось экспортировать данные")
+            except Exception as e:
+                QMessageBox.warning(self, "Ошибка", f"Не удалось экспортировать данные: {e}")
+
+    def export_to_csv(self):
+        file_path, _ = QFileDialog.getSaveFileName(self, "Экспорт в CSV", "", "CSV Files (*.csv)")
+        if file_path:
+            if not file_path.endswith('.csv'):
+                file_path += '.csv'
+            
+            try:
+                import csv
+                txs = self.data_manager.get_transactions(self.category)
+                if not txs: return
+                
+                keys = txs[0].keys()
+                with open(file_path, 'w', newline='', encoding='utf-8-sig') as f:
+                    dict_writer = csv.DictWriter(f, fieldnames=keys)
+                    dict_writer.writeheader()
+                    dict_writer.writerows(txs)
+                
+                QMessageBox.information(self, "Успех", f"Данные успешно экспортированы в\n{file_path}")
+            except Exception as e:
+                QMessageBox.warning(self, "Ошибка", f"Не удалось экспортировать данные: {e}")
 
     def refresh_data(self):
         t = StyleManager.get_theme(self.current_theme)
@@ -345,8 +491,10 @@ class GenericTab(QWidget):
         if not stats: return
 
         # Update Balance Stats
-        self.stat_start.value_label.setText(f"${stats['starting_amount']:,.0f}")
-        self.stat_balance.value_label.setText(f"${stats['current_balance']:,.0f}")
+        # self.stat_start.value_label.setText(f"${stats.get('starting_amount', 0):,.0f}") # Removed
+        balances = self.data_manager.get_total_capital_balance()
+        # Use 2 decimals for balance display as per requirements
+        self.stat_balance.value_label.setText(f"${balances['liquid_cash']:,.2f}")
 
         # Filter Logic
         filter_mode = self.filter_combo.currentText()
@@ -531,14 +679,3 @@ class GenericTab(QWidget):
         dialog = ItemStatsDialog(self.main_window, self.data_manager, self.category)
         dialog.exec()
 
-    def export_data(self):
-        file_path, _ = QFileDialog.getSaveFileName(self, "Экспорт в Excel", "", "Excel Files (*.xlsx)")
-        if file_path:
-            if not file_path.endswith('.xlsx'):
-                file_path += '.xlsx'
-            
-            success = self.data_manager.export_to_excel(self.category, file_path)
-            if success:
-                QMessageBox.information(self, "Успех", f"Данные успешно экспортированы в\n{file_path}")
-            else:
-                QMessageBox.warning(self, "Ошибка", "Не удалось экспортировать данные")

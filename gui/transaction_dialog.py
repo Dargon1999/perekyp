@@ -2,15 +2,16 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, 
     QFrame, QLineEdit, QApplication, QGraphicsDropShadowEffect, 
     QComboBox, QDateEdit, QFileDialog, QButtonGroup, QScrollArea, QSizeGrip,
-    QWidget, QCompleter, QMessageBox
+    QWidget, QCompleter, QMessageBox, QCheckBox
 )
-from PyQt6.QtCore import Qt, QDate, QTime, QTimer, QSize, QRect, QPropertyAnimation, QEasingCurve
+from PyQt6.QtCore import Qt, QDate, QTime, QTimer, QSize, QRect, QPropertyAnimation, QEasingCurve, QPoint
 from PyQt6.QtGui import QColor, QIcon, QPixmap, QAction, QKeySequence
 import traceback
 
 from gui.styles import StyleManager
 from gui.custom_dialogs import StyledDialogBase, ResizeMixin
 from gui.title_bar import CustomTitleBar
+from gui.widgets.calculator_widget import CalculatorWidget
 from datetime import datetime
 
 class TransactionDialog(QDialog, ResizeMixin):
@@ -21,6 +22,21 @@ class TransactionDialog(QDialog, ResizeMixin):
         self.data_manager = data_manager if data_manager else (parent.data_manager if parent else None)
         self.category = category
         self.current_image_path = None
+        
+        # Dragging state
+        self.isDragging = False
+        self.dragPosition = QPoint()
+        
+        # Initialize Calculator (hidden by default)
+        self.calculator = CalculatorWidget(self, self.data_manager, settings_key="dialog_calc_pos")
+        self.calculator.result_ready.connect(self.on_calculator_result)
+        self.calculator.hide()
+        
+        # Load saved position if any
+        if self.data_manager:
+            pos = self.data_manager.get_setting("dialog_calc_pos", None)
+            if pos:
+                self.calculator.move(pos[0], pos[1])
         
         # Determine theme colors
         self.theme = StyledDialogBase._theme
@@ -40,10 +56,14 @@ class TransactionDialog(QDialog, ResizeMixin):
         # Frameless setup
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        # Restore standard size
-        self.resize(500, 650)
-        self.setMinimumWidth(450)
-        self.setMinimumHeight(550)
+        # Adaptive sizing
+        screen = QApplication.primaryScreen().availableGeometry()
+        target_width = min(500, int(screen.width() * 0.95))
+        target_height = min(650, int(screen.height() * 0.95))
+        
+        self.resize(target_width, target_height)
+        self.setMinimumWidth(min(320, target_width))
+        self.setMinimumHeight(min(500, target_height))
         
         # Main Layout
         self.layout = QVBoxLayout(self)
@@ -82,6 +102,17 @@ class TransactionDialog(QDialog, ResizeMixin):
         self.title_bar.profile_btn.hide()
         self.title_bar.active_profile_label.hide()
         
+        # Add Calculator button to Title Bar for fishing
+        if self.category == "fishing":
+            self.title_bar.chat_btn.setText("🧮 Калькулятор")
+            self.title_bar.chat_btn.show()
+            try:
+                self.title_bar.chat_btn.clicked.disconnect()
+            except: pass
+            self.title_bar.chat_btn.clicked.connect(self.toggle_calculator)
+        else:
+            self.title_bar.chat_btn.hide()
+        
         self.title_bar.setStyleSheet("""
             QWidget {
                 background-color: transparent;
@@ -99,11 +130,16 @@ class TransactionDialog(QDialog, ResizeMixin):
         
         self.content_widget = QWidget()
         self.content_layout = QVBoxLayout(self.content_widget)
-        self.content_layout.setContentsMargins(20, 15, 20, 15) # Reduced margins
-        self.content_layout.setSpacing(12) # Reduced spacing
+        self.content_layout.setContentsMargins(20, 15, 20, 15)
+        self.content_layout.setSpacing(12)
         
         self.scroll_area.setWidget(self.content_widget)
         self.container_layout.addWidget(self.scroll_area)
+        
+        # Initialize Calculator as overlay (hidden by default)
+        self.calculator = CalculatorWidget(self, self.data_manager, settings_key="dialog_calc_pos")
+        self.calculator.result_ready.connect(self.on_calculator_result)
+        self.calculator.hide()
         
         self.setup_ui()
         
@@ -183,18 +219,34 @@ class TransactionDialog(QDialog, ResizeMixin):
             self.content_layout.addWidget(date_container)
 
             # -- Item Name Field --
-            item_container = self.create_input_container("Название товара/авто")
-            self.item_name_input = QComboBox()
-            self.item_name_input.setEditable(True)
-            self.item_name_input.setFixedHeight(40)
-            self.item_name_input.setPlaceholderText("Например: Sultan")
+            item_container = self.create_input_container("Снасти / Рыба" if self.category == "fishing" else "Название товара/авто")
             
-            if self.data_manager:
-                items = self.data_manager.get_unique_item_names(self.category)
-                self.item_name_input.addItems(items)
-                completer = QCompleter(items)
-                completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-                self.item_name_input.setCompleter(completer)
+            if self.category == "fishing":
+                # Special handling for Fishing: Gear Category Dropdown
+                self.item_name_input = QComboBox()
+                self.item_name_input.setFixedHeight(40)
+                # Reordered categories: 
+                # Income: Рыба, Снасти
+                # Expense: Все снасти (others)
+                self.item_name_input.addItems(["Рыба", "Снасти", "Все снасти", "Удочка", "Катушка", "Леска", "Наживка"])
+                
+                # Logic for default selection based on type
+                self.update_fishing_defaults()
+                
+                # Connect type change to re-select default
+                self.type_group.buttonClicked.connect(self.update_fishing_defaults)
+            else:
+                self.item_name_input = QComboBox()
+                self.item_name_input.setEditable(True)
+                self.item_name_input.setFixedHeight(40)
+                self.item_name_input.setPlaceholderText("Например: Sultan")
+                
+                if self.data_manager:
+                    items = self.data_manager.get_unique_item_names(self.category)
+                    self.item_name_input.addItems(items)
+                    completer = QCompleter(items)
+                    completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+                    self.item_name_input.setCompleter(completer)
                 
             item_container.layout().addWidget(self.item_name_input)
             self.content_layout.addWidget(item_container)
@@ -322,7 +374,6 @@ class TransactionDialog(QDialog, ResizeMixin):
                 border-bottom: 2px solid {self.placeholder_color};
                 width: 8px;
                 height: 8px;
-                transform: rotate(-45deg);
                 margin-right: 10px;
                 margin-top: 2px;
             }}
@@ -370,12 +421,32 @@ class TransactionDialog(QDialog, ResizeMixin):
                 background-color: {self.border_color};
             }}
         """)
+        
+    def update_fishing_defaults(self):
+        """Sets default item based on Income/Expense for Fishing."""
+        if self.category != "fishing": return
+        
+        is_income = self.btn_income.isChecked()
+        if is_income:
+            idx = self.item_name_input.findText("Все снасти")
+            if idx >= 0: self.item_name_input.setCurrentIndex(idx)
+        else:
+            idx = self.item_name_input.findText("Рыба")
+            if idx >= 0: self.item_name_input.setCurrentIndex(idx)
 
     def update_type_styles(self, btn=None):
+        # Auto-close calculator when switching types as requested
+        if hasattr(self, 'calculator') and self.calculator.isVisible():
+            self.calculator.hide()
+            self.amount_input.setFocus()
+
         if not self.btn_income.isChecked() and not self.btn_expense.isChecked():
             return
             
         is_income = self.btn_income.isChecked()
+        
+        # Apply fishing defaults when switching type
+        self.update_fishing_defaults()
         
         # Reset fields state
         self.amount_input.setReadOnly(False)
@@ -567,22 +638,33 @@ class TransactionDialog(QDialog, ResizeMixin):
                 QMessageBox.warning(self, "Ошибка", "Пожалуйста, введите корректную стоимость объявления.")
                 return None
 
+        # Item Name logic
         return {
             "amount": amount,
             "comment": comment,
             "date": self.date_edit.date().toString("dd.MM.yyyy"),
             "item_name": self.item_name_input.currentText().strip(),
             "image_path": self.current_image_path,
-            "ad_cost": ad_cost # Return ad cost for processing
+            "ad_cost": ad_cost
         }
 
+    def reject(self):
+        # Auto-close calculator on cancel with animation
+        if hasattr(self, 'calculator') and self.calculator.isVisible():
+            self.calculator.animate_hide()
+        super().reject()
+
     def accept(self):
+        # Auto-close calculator on save with animation
+        if hasattr(self, 'calculator') and self.calculator.isVisible():
+            self.calculator.animate_hide()
+            
         data = self.get_data()
         if not data: return # Validation failed
 
         if self.data_manager:
             if self.transaction:
-                # Update existing
+                # Update existing (always single record)
                 self.data_manager.update_transaction(
                     self.category,
                     self.transaction["id"],
@@ -605,8 +687,84 @@ class TransactionDialog(QDialog, ResizeMixin):
                     ad_cost=data.get("ad_cost", 0.0)
                 )
         
-        QDialog.accept(self)
+        super().accept()
 
-    # -- Dragging Logic for Frameless Window (Optional, if clicking outside title bar) --
-    # The CustomTitleBar handles dragging, but usually users expect to drag from empty space too.
-    # We'll leave it to TitleBar for now to keep it standard.
+    def toggle_calculator(self):
+        if self.calculator.isVisible():
+            self.calculator.hide()
+        else:
+            # Position calculator relative to dialog
+            # Since it's now a Window, we use global coordinates
+            pos = self.mapToGlobal(QPoint((self.width() - self.calculator.width()) // 2, 60))
+            
+            # Load saved position if any, otherwise use calculated pos
+            saved_pos = self.data_manager.get_setting("dialog_calc_pos", None)
+            if saved_pos:
+                self.calculator.move(saved_pos[0], saved_pos[1])
+            else:
+                self.calculator.move(pos)
+                
+            self.calculator.show()
+            self.calculator.raise_()
+            self.calculator.activateWindow()
+
+    def on_calculator_result(self, result, is_accumulation):
+        try:
+            # Handle accumulation or reset mode
+            current_text = self.amount_input.text().strip().replace(" ", "").replace(",", ".")
+            
+            if is_accumulation and current_text:
+                try:
+                    current_val = float(current_text)
+                    new_val = float(result)
+                    total = current_val + new_val
+                    self.amount_input.setText(str(round(total, 2)))
+                except ValueError:
+                    self.amount_input.setText(result)
+            else:
+                # Reset mode or empty field: just set the result
+                self.amount_input.setText(result)
+                
+            self.amount_input.setFocus()
+            if self.calculator.isVisible():
+                self.calculator.animate_hide()
+        except Exception as e:
+            traceback.print_exc()
+            self.amount_input.setText(result)
+
+    # -- Dragging Logic for Frameless Window --
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            # Allow dragging from the entire title bar area
+            if self.title_bar.underMouse() or self.title_bar.childAt(event.position().toPoint() - self.title_bar.pos()) in [None, self.title_bar.title_label, self.title_bar.icon_label]:
+                self.isDragging = True
+                self.dragPosition = event.globalPosition().toPoint() - self.pos()
+                event.accept()
+
+    def mouseMoveEvent(self, event):
+        if self.isDragging and event.buttons() & Qt.MouseButton.LeftButton:
+            new_pos = event.globalPosition().toPoint() - self.dragPosition
+            
+            # Boundary checks within current screen
+            current_screen = QApplication.screenAt(event.globalPosition().toPoint()) or QApplication.primaryScreen()
+            screen_geo = current_screen.availableGeometry()
+            
+            x = max(screen_geo.left(), min(new_pos.x(), screen_geo.right() - self.width()))
+            y = max(screen_geo.top(), min(new_pos.y(), screen_geo.bottom() - self.height()))
+            
+            self.move(x, y)
+            event.accept()
+
+    def update_fishing_defaults(self, *args):
+        if self.category != "fishing": return
+        if self.btn_income.isChecked():
+            # In Income: First is Fish, then Gear
+            # We already have items: ["Рыба", "Снасти", "Все снасти", "Удочка", "Катушка", "Леска", "Наживка"]
+            self.item_name_input.setCurrentText("Рыба")
+        else:
+            # In Expense: First is All Gear
+            self.item_name_input.setCurrentText("Все снасти")
+
+    def mouseReleaseEvent(self, event):
+        self.isDragging = False
+        event.accept()

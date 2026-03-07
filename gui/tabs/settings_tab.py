@@ -482,6 +482,59 @@ class SettingsTab(QWidget):
         
         layout.addWidget(backup_group)
         
+        # Manual Balance Edit Logic
+        balance_group = QGroupBox("Управление балансом")
+        balance_group_layout = QVBoxLayout(balance_group)
+        
+        manual_edit_layout = QHBoxLayout()
+        manual_edit_layout.addWidget(QLabel("Разрешить ручное редактирование баланса:"))
+        
+        is_manual_edit = self.data_manager.get_setting("allowManualBalanceEdit", False)
+        
+        self.manual_edit_toggle = ToggleSwitch()
+        self.manual_edit_toggle.setChecked(bool(is_manual_edit))
+        self.manual_edit_toggle.setToolTip("Разрешить редактирование баланса по двойному клику во всех разделах")
+        self.manual_edit_toggle.setAccessibleName("Разрешить ручное редактирование баланса")
+        self.manual_edit_toggle.toggled.connect(self.on_manual_edit_toggled)
+        
+        manual_edit_layout.addWidget(self.manual_edit_toggle)
+        manual_edit_layout.addStretch()
+        balance_group_layout.addLayout(manual_edit_layout)
+
+        # Cost of Appearance Visibility (Task 2)
+        coa_layout = QHBoxLayout()
+        coa_layout.addWidget(QLabel("Отображать стоимость появления в списке покупок:"))
+        
+        is_coa = self.data_manager.get_setting("showCostOfAppearance", False)
+        
+        self.coa_toggle = ToggleSwitch()
+        self.coa_toggle.setChecked(bool(is_coa))
+        self.coa_toggle.setToolTip("Показывать столбец 'Стоимость появления' в разделе 'Покупка/Продажа'")
+        self.coa_toggle.setAccessibleName("Отображать стоимость появления")
+        self.coa_toggle.toggled.connect(self.on_coa_toggled)
+        
+        coa_layout.addWidget(self.coa_toggle)
+        coa_layout.addStretch()
+        balance_group_layout.addLayout(coa_layout)
+
+        # Show Buy Price in Inventory (Task 4)
+        sbp_layout = QHBoxLayout()
+        sbp_layout.addWidget(QLabel("Отображать цену покупки в списке склада:"))
+        
+        is_sbp = self.data_manager.get_setting("showBuyPriceInInventory", True)
+        
+        self.sbp_toggle = ToggleSwitch()
+        self.sbp_toggle.setChecked(bool(is_sbp))
+        self.sbp_toggle.setToolTip("Показывать цену покупки под названием товара во вкладке «Покупка/Продажа»")
+        self.sbp_toggle.setAccessibleName("Отображать цену покупки")
+        self.sbp_toggle.toggled.connect(self.on_sbp_toggled)
+        
+        sbp_layout.addWidget(self.sbp_toggle)
+        sbp_layout.addStretch()
+        balance_group_layout.addLayout(sbp_layout)
+        
+        layout.addWidget(balance_group)
+
         # License Cost Logic
         price_group = QGroupBox("Автоматизация стоимости объявлений")
         price_group_layout = QVBoxLayout(price_group)
@@ -593,6 +646,20 @@ class SettingsTab(QWidget):
         btn.setIcon(QIcon(pixmap))
         btn.setText("") # Clear text if any
 
+    def on_coa_toggled(self, checked):
+        self.data_manager.set_setting("showCostOfAppearance", checked)
+        self.data_manager.save_data()
+        
+        # Notify other components immediately
+        self.data_manager.data_changed.emit()
+
+    def on_sbp_toggled(self, checked):
+        self.data_manager.set_setting("showBuyPriceInInventory", checked)
+        self.data_manager.save_data()
+        
+        # Notify other components immediately
+        self.data_manager.data_changed.emit()
+
     def on_theme_changed(self, index):
         theme_name = "dark" if index == 0 else "light"
         self.data_manager.set_setting("theme", theme_name)
@@ -606,6 +673,13 @@ class SettingsTab(QWidget):
             
         self.update_nav_styles()
 
+    def on_manual_edit_toggled(self, checked):
+        self.data_manager.set_setting("allowManualBalanceEdit", checked)
+        self.data_manager.save_data()
+        
+        # Notify other components immediately
+        self.data_manager.data_changed.emit()
+
     def on_price_changed(self, text):
         try:
             val = float(text)
@@ -616,7 +690,7 @@ class SettingsTab(QWidget):
         except ValueError:
             # Invalid input (not a number or negative)
             self.price_input.setStyleSheet("border: 1px solid red;")
-            
+        
     def on_auto_price_toggled(self, checked):
         """Handle auto-add price toggle."""
         self.data_manager.set_setting("listing_cost_enabled", checked)
@@ -892,7 +966,8 @@ class SettingsTab(QWidget):
             ("cooking", "Кулинария", "utensils"),
             ("analytics", "Аналитика", "chart-bar"),
             ("capital_planning", "Капитал", "coins"),
-            ("timers", "Таймер", "clock")
+            ("timers", "Таймер", "clock"),
+            ("fishing", "Рыбалка", "fish")
         ]
         
         self.tab_cards = {} 

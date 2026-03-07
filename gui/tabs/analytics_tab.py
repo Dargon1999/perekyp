@@ -25,14 +25,16 @@ class AnalyticsTab(QWidget):
         # Create Sub-tabs
         self.tab_overview = AnalyticsSubTab("all", "Обзор", self.data_manager, self)
         self.tab_rent = AnalyticsSubTab("car_rental", "Аренда авто", self.data_manager, self)
-        self.tab_clothes = AnalyticsSubTab("clothes", "Покупка / Продажа", self.data_manager, self)
+        self.tab_clothes = AnalyticsSubTab("clothes_new", "Покупка / Продажа", self.data_manager, self)
         self.tab_mining = AnalyticsSubTab("mining", "Добыча", self.data_manager, self)
+        self.tab_fishing = AnalyticsSubTab("fishing", "Рыбалка", self.data_manager, self)
         self.tab_achievements = AchievementsTab(self.data_manager, self)
         
         self.tabs.addTab(self.tab_overview, "Обзор")
         self.tabs.addTab(self.tab_rent, "Аренда авто")
         self.tabs.addTab(self.tab_clothes, "Покупка / Продажа")
         self.tabs.addTab(self.tab_mining, "Добыча")
+        self.tabs.addTab(self.tab_fishing, "Рыбалка")
         self.tabs.addTab(self.tab_achievements, "Достижения")
         
         # Style the tab bar slightly if needed

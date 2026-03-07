@@ -2,30 +2,17 @@ import os
 import shutil
 import sys
 import subprocess
+from version import VERSION
 
 def get_pyinstaller_path():
-    # Try to find pyinstaller in common locations
-    possible_paths = [
-        os.path.join('.venv', 'Scripts', 'pyinstaller.exe'),
-        os.path.join('venv', 'Scripts', 'pyinstaller.exe'),
-        'pyinstaller.exe',
-        'pyinstaller'
-    ]
-    for path in possible_paths:
-        # Check if it's an absolute path or exists relative to CWD
-        if os.path.exists(path):
-            return path
-        # Check if it's in PATH
-        if shutil.which(path):
-            return path
-    return 'pyinstaller' # Final fallback
+    return [sys.executable, '-m', 'PyInstaller']
 
 def build_updater():
     print("Building updater.exe...")
-    pyinstaller_path = get_pyinstaller_path()
+    pyinstaller_cmd = get_pyinstaller_path()
         
     cmd = [
-        pyinstaller_path,
+        *pyinstaller_cmd,
         'updater.py',
         '--onefile',
         '--noconsole',
@@ -61,10 +48,11 @@ def build_main():
     if os.path.exists(gui_assets_path):
          add_data_args.append(f'--add-data={gui_assets_path};gui/assets')
     
-    pyinstaller_path = get_pyinstaller_path()
+    pyinstaller_cmd = get_pyinstaller_path()
 
+    release_dir = f"Release_{VERSION}"
     cmd = [
-        pyinstaller_path,
+        *pyinstaller_cmd,
         'main.py',
         '--onefile',
         '--noconsole',
@@ -72,7 +60,7 @@ def build_main():
         f'--icon={icon_path}',
         f'--version-file={version_file}',
         *add_data_args,
-        '--distpath=Release_9.0.1',
+        f'--distpath={release_dir}',
         '--workpath=build_main',
         '--specpath=build_main_spec',
         '--hidden-import=engineio.async_drivers.threading',
@@ -101,10 +89,14 @@ def build_main():
     print("MoneyTracker build complete.")
 
 if __name__ == "__main__":
+    release_dir = f"Release_{VERSION}"
     # Clean previous builds
-    for d in ['dist', 'build_updater', 'build_main', 'build_main_spec', 'Release_9.0.1']:
+    for d in ['dist', 'build_updater', 'build_main', 'build_main_spec', release_dir]:
         if os.path.exists(d):
-            shutil.rmtree(d)
+            try:
+                shutil.rmtree(d)
+            except Exception as e:
+                print(f"Warning: Could not remove directory {d}: {e}")
 
     print("--- BUILD START ---")
     build_updater()
@@ -112,4 +104,4 @@ if __name__ == "__main__":
     print("--- BUILD END ---")
     
     print("Build process finished.")
-    print("Output: Release_9.0.1/MoneyTracker.exe")
+    print(f"Output: {release_dir}/MoneyTracker.exe")

@@ -26,7 +26,11 @@ class ResizeMixin:
     def resizeEvent(self, event):
         if hasattr(self, 'size_grip'):
             self.size_grip.move(self.width() - 20, self.height() - 20)
-        super().resizeEvent(event)
+        # Safely call super().resizeEvent if it exists in MRO
+        try:
+            super().resizeEvent(event)
+        except (AttributeError, TypeError):
+            pass
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -43,7 +47,10 @@ class ResizeMixin:
                 self._drag_pos = event.globalPosition().toPoint()
                 event.accept()
                 return
-        super().mousePressEvent(event)
+        try:
+            super().mousePressEvent(event)
+        except (AttributeError, TypeError):
+            pass
 
     def mouseMoveEvent(self, event):
         if self._resizing:
@@ -61,7 +68,10 @@ class ResizeMixin:
                 self._update_cursor(edge)
             else:
                 self.setCursor(Qt.CursorShape.ArrowCursor)
-            super().mouseMoveEvent(event)
+            try:
+                super().mouseMoveEvent(event)
+            except (AttributeError, TypeError):
+                pass
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -69,7 +79,10 @@ class ResizeMixin:
             self._moving = False # Reset moving
             self._resize_edge = None
             self.setCursor(Qt.CursorShape.ArrowCursor)
-        super().mouseReleaseEvent(event)
+        try:
+            super().mouseReleaseEvent(event)
+        except (AttributeError, TypeError):
+            pass
 
     def _get_resize_edge(self, pos):
         m = self._resize_margin

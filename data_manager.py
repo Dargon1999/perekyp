@@ -10,8 +10,9 @@ import logging
 import time
 import hashlib
 from datetime import datetime
-from PyQt6.QtCore import Qt, QByteArray, QBuffer, QIODevice
+from PyQt6.QtCore import Qt, QByteArray, QBuffer, QIODevice, pyqtSignal, QObject
 from PyQt6.QtGui import QPixmap, QPainter
+from utils import Money
 
 
 APP_NAME = "MoneyTracker"
@@ -55,8 +56,11 @@ else:
     os.makedirs(DATA_DIR, exist_ok=True)
     os.makedirs(IMAGES_DIR, exist_ok=True)
 
-class DataManager:
+class DataManager(QObject):
+    data_changed = pyqtSignal()
+
     def __init__(self, filename=None):
+        super().__init__()
         # Use global DATA_FILE if filename not provided
         self.filename = filename if filename else DATA_FILE
         
@@ -379,18 +383,40 @@ class DataManager:
         # Create backup before saving
         self.perform_scheduled_backup()
         
+        # Add metadata
+        self.data["_metadata"] = {
+            "version": "9.0.1",
+            "schema_version": 2,
+            "last_modified": datetime.now().isoformat(),
+            "app_version": APP_NAME
+        }
+        
+        # Use atomic write to prevent data corruption
+        temp_file = self.filename + ".tmp"
         max_retries = 3
+        
         for attempt in range(max_retries):
             try:
-                with open(self.filename, "w", encoding="utf-8") as f:
+                # Write to temp file first
+                with open(temp_file, "w", encoding="utf-8") as f:
                     json.dump(self.data, f, indent=4, ensure_ascii=False)
+                
+                # Atomic replace (renames are atomic on POSIX and modern Windows)
+                if os.path.exists(self.filename):
+                    os.replace(temp_file, self.filename)
+                else:
+                    os.rename(temp_file, self.filename)
+                
+                # Emit signal after successful save
+                self.data_changed.emit()
                 return
             except IOError as e:
                 msg = f"Error saving data to {self.filename} (Attempt {attempt+1}/{max_retries}): {e}"
-                print(msg)
                 logging.error(msg)
                 time.sleep(0.1)
-        
+            except Exception as e:
+                logging.error(f"Unexpected error saving data: {e}")
+                
         logging.critical(f"Failed to save data after {max_retries} attempts.")
 
     # --- Backup Management ---
@@ -517,43 +543,50 @@ class DataManager:
                 changed = True
             
             # Initialize categories
-            for cat in ["car_rental", "mining", "farm_bp"]:
+            for cat in ["car_rental", "mining", "farm_bp", "fishing"]:
                 if cat not in profile:
                     profile[cat] = {
-                        "starting_amount": 0.0,
                         "transactions": []
                     }
                     changed = True
                 elif isinstance(profile[cat], list):
                     profile[cat] = {
-                        "starting_amount": 0.0,
                         "transactions": profile[cat]
                     }
+                    changed = True
+                # Remove starting_amount from category if it exists
+                if isinstance(profile[cat], dict) and "starting_amount" in profile[cat]:
+                    del profile[cat]["starting_amount"]
                     changed = True
             
             if "clothes" not in profile:
                 profile["clothes"] = {
-                    "starting_amount": 0.0,
                     "inventory": [], 
                     "sold_history": [] 
                 }
                 changed = True
             elif isinstance(profile["clothes"], list):
                 profile["clothes"] = {
-                    "starting_amount": 0.0,
                     "inventory": profile["clothes"], 
                     "sold_history": [] 
                 }
+                changed = True
+            # Remove starting_amount from clothes
+            if isinstance(profile["clothes"], dict) and "starting_amount" in profile["clothes"]:
+                del profile["clothes"]["starting_amount"]
                 changed = True
 
             # Initialize new trade categories
             for cat in ["clothes_new", "cars_trade"]:
                 if cat not in profile:
                     profile[cat] = {
-                        "starting_amount": 0.0,
                         "inventory": [],
                         "sold_history": []
                     }
+                    changed = True
+                # Remove starting_amount from trade categories
+                if isinstance(profile[cat], dict) and "starting_amount" in profile[cat]:
+                    del profile[cat]["starting_amount"]
                     changed = True
             
             # Ensure all clothes items have IDs
@@ -684,21 +717,15 @@ class DataManager:
             "settings": {
                 "theme": "dark",
                 "listing_cost": 0.0,
-                "version": "6.1.8"
+                "version": "9.2.0"
             },
-            "car_rental": {
-                "starting_amount": 0.0,
-                "transactions": []
-            },
-            "mining": {
-                "starting_amount": 0.0,
-                "transactions": []
-            },
-            "clothes": {
-                "starting_amount": 0.0,
-                "inventory": [],
-                "sold_history": []
-            },
+            "car_rental": {"transactions": []},
+            "mining": {"transactions": []},
+            "farm_bp": {"transactions": []},
+            "fishing": {"transactions": []},
+            "clothes": {"inventory": [], "sold_history": []},
+            "clothes_new": {"inventory": [], "sold_history": []},
+            "cars_trade": {"inventory": [], "sold_history": []},
             "capital_planning": {
                 "target_amount": 0.0,
                 "target_date": None,
@@ -959,13 +986,25 @@ class DataManager:
         profile["capital_planning"] = data
         self.save_data()
 
+    def get_fishing_equipment(self):
+        profile = self.get_active_profile()
+        if not profile: return {}
+        if "fishing" not in profile: return {}
+        return profile["fishing"].get("equipment", {})
+
+    def update_fishing_equipment(self, equipment_data):
+        profile = self.get_active_profile()
+        if not profile: return
+        if "fishing" not in profile:
+            profile["fishing"] = {}
+        profile["fishing"]["equipment"] = equipment_data
+        self.save_data()
+
     def get_achievements(self):
+        """Returns a list of unlocked achievement IDs for the active profile."""
         profile = self.get_active_profile()
         if not profile: return []
-        if "achievements" not in profile:
-            profile["achievements"] = []
-            self.save_data()
-        return profile["achievements"]
+        return profile.get("achievements", [])
 
     def unlock_achievement(self, achievement_id):
         profile = self.get_active_profile()
@@ -978,6 +1017,19 @@ class DataManager:
             self.save_data()
             return True
         return False
+
+    def get_unique_item_names(self, category):
+        """Returns a list of unique item names used in a specific category."""
+        transactions = self.get_transactions(category)
+        names = set()
+        for t in transactions:
+            name = t.get("item_name")
+            if name:
+                # Remove icons if any (like 📷)
+                clean_name = name.replace("📷", "").strip()
+                if clean_name:
+                    names.add(clean_name)
+        return sorted(list(names))
 
     def add_transaction(self, category, amount, comment, date_str=None, item_name="", image_path=None, ad_cost=0.0):
         profile = self.get_active_profile()
@@ -997,7 +1049,7 @@ class DataManager:
             "ad_cost": float(ad_cost) if ad_cost else 0.0
         }
 
-        if category in ["car_rental", "mining", "farm_bp"]:
+        if category in ["car_rental", "mining", "farm_bp", "fishing"]:
             if category not in profile:
                 profile[category] = {"transactions": [], "starting_amount": 0.0}
             if "transactions" not in profile[category]:
@@ -1025,7 +1077,7 @@ class DataManager:
             return False
         
         target_list = None
-        if category in ["car_rental", "mining", "farm_bp"]:
+        if category in ["car_rental", "mining", "farm_bp", "fishing"]:
             target_list = profile.get(category, {}).get("transactions", [])
         else:
             target_list = profile.get("transactions", [])
@@ -1034,7 +1086,7 @@ class DataManager:
         new_list = [t for t in target_list if t["id"] != transaction_id]
         
         if len(new_list) < original_len:
-            if category in ["car_rental", "mining", "farm_bp"]:
+            if category in ["car_rental", "mining", "farm_bp", "fishing"]:
                 profile[category]["transactions"] = new_list
             else:
                 profile["transactions"] = new_list
@@ -1047,7 +1099,7 @@ class DataManager:
         if not profile: return False
         
         target_list = None
-        if category in ["car_rental", "mining", "farm_bp"]:
+        if category in ["car_rental", "mining", "farm_bp", "fishing"]:
             target_list = profile.get(category, {}).get("transactions", [])
         else:
             target_list = profile.get("transactions", [])
@@ -1073,7 +1125,7 @@ class DataManager:
     def get_transactions(self, category):
         profile = self.get_active_profile()
         if not profile: return []
-        if category in ["car_rental", "mining", "farm_bp"]:
+        if category in ["car_rental", "mining", "farm_bp", "fishing"]:
             return profile.get(category, {}).get("transactions", [])
         return profile.get("transactions", [])
 
@@ -1095,58 +1147,109 @@ class DataManager:
         profile = self.get_active_profile()
         if not profile: return None
 
-        if category in ["clothes", "clothes_new", "cars_trade"]:
+        if category in ["clothes", "clothes_new", "cars_trade", "fishing"]:
             if category not in profile:
-                return {"starting_amount": 0, "income": 0, "expenses": 0, "current_balance": 0, "pure_profit": 0}
+                return {"income": 0, "expenses": 0, "current_balance": 0, "pure_profit": 0}
+            
+            if category == "fishing":
+                # Fishing uses transactions list
+                transactions = profile.get(category, {}).get("transactions", [])
+                income = Money(0)
+                expenses = Money(0)
+                for t in transactions:
+                    amt = Money.from_major(t["amount"])
+                    if amt.amount > 0: income += amt
+                    else: expenses += abs(amt)
+            else:
+                inventory = profile[category].get("inventory", [])
+                sold = profile[category].get("sold_history", [])
                 
-            starting = profile[category].get("starting_amount", 0)
-            inventory = profile[category].get("inventory", [])
-            sold = profile[category].get("sold_history", [])
+                income = Money(0)
+                for item in sold:
+                    income += Money.from_major(item.get("sell_price", 0))
+                
+                expenses = Money(0)
+                for item in inventory:
+                    expenses += Money.from_major(item.get("buy_price", 0))
+                for item in sold:
+                    expenses += Money.from_major(item.get("buy_price", 0))
             
-            def get_price(item, key):
-                try:
-                    return float(item.get(key, 0))
-                except (ValueError, TypeError):
-                    return 0.0
-
-            income = sum(get_price(item, "sell_price") for item in sold)
-            expenses_inventory = sum(get_price(item, "buy_price") for item in inventory)
-            expenses_sold = sum(get_price(item, "buy_price") for item in sold)
-            total_expenses = expenses_inventory + expenses_sold
+            pure_profit = income - expenses
             
-            current_balance = starting + income - total_expenses
-            pure_profit = income - total_expenses
+            # Use cached or manual calculation to avoid recursion
+            liquid_cash = Money.from_major(profile.get("starting_amount", 0.0))
+            # ... we need a way to get liquid cash without calling get_total_capital_balance
+            # Let's just return the pure profit and let the UI handle the global balance display
             
             return {
-                "starting_amount": starting,
-                "income": income,
-                "expenses": total_expenses,
-                "current_balance": current_balance,
-                "pure_profit": pure_profit
+                "income": income.to_major(),
+                "expenses": expenses.to_major(),
+                "pure_profit": pure_profit.to_major()
             }
             
         elif category in ["car_rental", "mining", "farm_bp"]:
-            starting = profile[category].get("starting_amount", 0)
-            transactions = profile[category]["transactions"]
+            transactions = profile.get(category, {}).get("transactions", [])
             
-            income = sum(t["amount"] for t in transactions if t["amount"] > 0)
-            expenses = sum(abs(t["amount"]) for t in transactions if t["amount"] < 0)
+            income = Money(0)
+            expenses = Money(0)
+            for t in transactions:
+                amt = Money.from_major(t["amount"])
+                if amt.amount > 0: income += amt
+                else: expenses += abs(amt)
+                
+                # Add ad cost
+                ad_cost = Money.from_major(t.get("ad_cost", 0.0))
+                expenses += ad_cost
             
-            # Add ad costs from income transactions to expenses
-            ad_costs = sum(t.get("ad_cost", 0.0) for t in transactions)
-            expenses += ad_costs
-            
-            current_balance = starting + income - expenses
             pure_profit = income - expenses
             
             return {
-                "starting_amount": starting,
-                "income": income,
-                "expenses": expenses,
-                "current_balance": current_balance,
-                "pure_profit": pure_profit
+                "income": income.to_major(),
+                "expenses": expenses.to_major(),
+                "pure_profit": pure_profit.to_major()
             }
         return None
+
+    def get_total_capital_balance(self):
+        """Calculates total liquid cash and total net worth across all modules."""
+        profile = self.get_active_profile()
+        if not profile:
+            return {"liquid_cash": 0.0, "net_worth": 0.0}
+
+        # Base starting amount from profile
+        liquid_cash = Money.from_major(profile.get("starting_amount", 0.0))
+        net_worth = Money(liquid_cash.amount)
+
+        # Categories with simple transactions (Income/Expenses)
+        for cat in ["car_rental", "mining", "farm_bp", "fishing"]:
+            stats = self.get_category_stats(cat)
+            if stats:
+                profit = Money.from_major(stats["pure_profit"])
+                liquid_cash += profit
+                net_worth += profit
+
+        # Categories with Inventory (Purchase-Sale)
+        for cat in ["clothes", "clothes_new", "cars_trade"]:
+            stats = self.get_category_stats(cat)
+            if stats:
+                # liquid_cash = starting + income - (expenses_inventory + expenses_sold)
+                # This is already handled in get_category_stats["current_balance"] relative to category starting amount.
+                # However, we want to add the PROFIT from these categories to the GLOBAL liquid cash.
+                profit = Money.from_major(stats["pure_profit"])
+                liquid_cash += profit
+                
+                # Net worth includes the value of items currently in inventory
+                inventory = profile.get(cat, {}).get("inventory", [])
+                inventory_value = Money(0)
+                for item in inventory:
+                    inventory_value += Money.from_major(item.get("buy_price", 0))
+                
+                net_worth = liquid_cash + inventory_value
+
+        return {
+            "liquid_cash": liquid_cash.to_major(),
+            "net_worth": net_worth.to_major()
+        }
 
     def export_profile(self, profile_id):
         for profile in self.data["profiles"]:
@@ -1222,8 +1325,10 @@ class DataManager:
         
         # 1. Calculate from transactions
         transactions = []
-        if category in ["car_rental", "mining", "farm_bp"] and category in profile:
+        if category in ["car_rental", "mining", "farm_bp", "fishing"] and category in profile:
              transactions = profile[category].get("transactions", [])
+        elif category not in ["car_rental", "mining", "farm_bp", "fishing"]:
+             transactions = profile.get("transactions", [])
         
         for t in transactions:
             name = t.get("item_name", "Неизвестно")

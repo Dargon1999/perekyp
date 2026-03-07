@@ -149,115 +149,143 @@ class AnalyticsSubTab(QWidget):
             return datetime.combine(start, datetime.min.time()), datetime.combine(end, datetime.max.time())
 
     def _get_all_transactions(self):
-        if self.category_key == "all":
-            transactions = []
-            # 1. Clothes
-            inventory = self.data_manager.get_clothes_inventory()
-            sold = self.data_manager.get_clothes_sold()
-            for item in inventory:
-                transactions.append({
-                    "date": item.get("date", ""), 
-                    "amount": -float(item.get("buy_price", 0)),
-                    "description": f"[Покупка / Продажа] Покупка: {item.get('name')}",
-                    "raw_date_fmt": "%Y-%m-%d"
-                })
-            for item in sold:
-                transactions.append({
-                    "date": item.get("date", ""), 
-                    "amount": -float(item.get("buy_price", 0)),
-                    "description": f"[Покупка / Продажа] Покупка: {item.get('name')} (Продано)",
-                    "raw_date_fmt": "%Y-%m-%d"
-                })
-                transactions.append({
-                    "date": item.get("sell_date", ""), 
-                    "amount": float(item.get("sell_price", 0)),
-                    "description": f"[Покупка / Продажа] Продажа: {item.get('name')}",
-                    "raw_date_fmt": "%Y-%m-%d"
-                })
+        transactions = []
+        
+        # 1. Clothes (Legacy and New)
+        categories_trade = ["clothes", "clothes_new", "cars_trade"]
+        for cat in categories_trade:
+            if self.category_key != "all" and self.category_key != cat:
+                continue
+                
+            inventory = self.data_manager.get_trade_inventory(cat)
+            sold = self.data_manager.get_trade_sold(cat)
             
-            # 2. Other Categories
-            for cat in ["car_rental", "mining"]:
-                raw_tx = self.data_manager.get_transactions(cat)
-                cat_name = "Аренда" if cat == "car_rental" else "Добыча"
-                for t in raw_tx:
+            cat_label = "Одежда" if "clothes" in cat else "Машины"
+            
+            for item in inventory:
+                if not isinstance(item, dict):
+                    continue
+                item_date = item.get("date_added", item.get("date", ""))
+                if not item_date:
+                    continue
+                try:
+                    buy_price = float(item.get("buy_price", 0))
                     transactions.append({
-                        "date": t.get("date", ""),
-                        "amount": float(t.get("amount", 0)),
-                        "description": f"[{cat_name}] " + (t.get("comment", "") or t.get("description", "")),
+                        "date": item_date.split(" ")[0], 
+                        "amount": -buy_price,
+                        "description": f"[{cat_label}] Покупка: {item.get('name', 'Без названия')}",
                         "raw_date_fmt": "%d.%m.%Y"
                     })
-            return transactions
-
-        transactions = []
-        if self.category_key == "clothes":
-            # Special handling for clothes
-            inventory = self.data_manager.get_clothes_inventory()
-            sold = self.data_manager.get_clothes_sold()
-            
-            # Inventory: Only expenses (buy_price)
-            for item in inventory:
-                transactions.append({
-                    "date": item.get("date", ""), # YYYY-MM-DD
-                    "amount": -float(item.get("buy_price", 0)),
-                    "description": f"Покупка: {item.get('name')}",
-                    "raw_date_fmt": "%Y-%m-%d"
-                })
-                
-            # Sold: Expense (buy_price) AND Income (sell_price)
+                except (ValueError, TypeError):
+                    continue
             for item in sold:
-                # Buy event
-                transactions.append({
-                    "date": item.get("date", ""), # YYYY-MM-DD
-                    "amount": -float(item.get("buy_price", 0)),
-                    "description": f"Покупка: {item.get('name')} (Продано)",
-                    "raw_date_fmt": "%Y-%m-%d"
-                })
-                # Sell event
-                transactions.append({
-                    "date": item.get("sell_date", ""), # YYYY-MM-DD
-                    "amount": float(item.get("sell_price", 0)),
-                    "description": f"Продажа: {item.get('name')}",
-                    "raw_date_fmt": "%Y-%m-%d"
-                })
-        else:
-            # Standard categories
-            raw_tx = self.data_manager.get_transactions(self.category_key)
+                if not isinstance(item, dict):
+                    continue
+                item_date = item.get("date_added", item.get("date", ""))
+                if not item_date:
+                    continue
+                try:
+                    buy_price = float(item.get("buy_price", 0))
+                    transactions.append({
+                        "date": item_date.split(" ")[0], 
+                        "amount": -buy_price,
+                        "description": f"[{cat_label}] Покупка: {item.get('name', 'Без названия')} (Продано)",
+                        "raw_date_fmt": "%d.%m.%Y"
+                    })
+                except (ValueError, TypeError):
+                    pass # Continue to sell part
+                
+                sell_date = item.get("sell_date", item.get("date_sold", ""))
+                if not sell_date:
+                    continue
+                try:
+                    sell_price = float(item.get("sell_price", 0))
+                    transactions.append({
+                        "date": sell_date.split(" ")[0], 
+                        "amount": sell_price,
+                        "description": f"[{cat_label}] Продажа: {item.get('name', 'Без названия')}",
+                        "raw_date_fmt": "%d.%m.%Y"
+                    })
+                except (ValueError, TypeError):
+                    continue
+        
+        # 2. Standard Categories (Income/Expense)
+        standard_cats = {
+            "car_rental": "Аренда",
+            "mining": "Добыча",
+            "farm_bp": "Ферма",
+            "fishing": "Рыбалка"
+        }
+        
+        for cat, label in standard_cats.items():
+            if self.category_key != "all" and self.category_key != cat:
+                continue
+                
+            raw_tx = self.data_manager.get_transactions(cat)
             for t in raw_tx:
                 transactions.append({
-                    "date": t.get("date", ""), # DD.MM.YYYY usually
+                    "date": t.get("date", ""),
                     "amount": float(t.get("amount", 0)),
-                    "description": t.get("comment", "") or t.get("description", ""),
+                    "description": f"[{label}] " + (t.get("comment", "") or t.get("item_name", "") or "Операция"),
                     "raw_date_fmt": "%d.%m.%Y"
                 })
+                
+                # Handle Ad Cost if present
+                ad_cost = float(t.get("ad_cost", 0))
+                if ad_cost > 0:
+                    transactions.append({
+                        "date": t.get("date", ""),
+                        "amount": -ad_cost,
+                        "description": f"[{label}] Расход на объявление: {t.get('item_name', '')}",
+                        "raw_date_fmt": "%d.%m.%Y"
+                    })
+                    
         return transactions
 
     def refresh_data(self):
-        start_date, end_date = self.get_date_range()
-        
-        all_transactions = self._get_all_transactions()
-        
-        # Filter by date
-        filtered_tx = []
-        for t in all_transactions:
-            try:
-                # Handle formats
-                fmt = t.get("raw_date_fmt", "%d.%m.%Y")
-                # Fallback check
-                if "-" in t['date']: fmt = "%Y-%m-%d"
-                elif "." in t['date']: fmt = "%d.%m.%Y"
-                
-                t_date = datetime.strptime(t['date'], fmt)
-                if start_date <= t_date <= end_date:
-                    # Normalize date for display
-                    t['display_date'] = t_date.strftime("%d.%m.%Y")
-                    filtered_tx.append(t)
-            except ValueError:
-                continue
+        try:
+            start_date, end_date = self.get_date_range()
+            
+            all_transactions = self._get_all_transactions()
+            
+            # Filter by date
+            filtered_tx = []
+            for t in all_transactions:
+                try:
+                    date_str = t.get("date", "")
+                    if not date_str:
+                        continue
+                        
+                    # Handle formats
+                    fmt = t.get("raw_date_fmt", "%d.%m.%Y")
+                    # Fallback check
+                    if "-" in date_str: fmt = "%Y-%m-%d"
+                    elif "." in date_str: fmt = "%d.%m.%Y"
+                    
+                    t_date = datetime.strptime(date_str, fmt)
+                    if start_date <= t_date <= end_date:
+                        # Normalize date for display
+                        t['display_date'] = t_date.strftime("%d.%m.%Y")
+                        filtered_tx.append(t)
+                except (ValueError, TypeError) as e:
+                    self.logger.warning(f"Error parsing date {t.get('date')}: {e}")
+                    continue
+        except Exception as e:
+            self.logger.error(f"Critical error in refresh_data: {e}")
+            self.show_no_data_message() # Or a more specific error message
+            return
 
         # 2. Calculate Stats
         income = sum(t['amount'] for t in filtered_tx if t['amount'] > 0)
         expense = sum(abs(t['amount']) for t in filtered_tx if t['amount'] < 0)
         balance = income - expense
+        
+        # Additional metrics for Fishing
+        metrics = {}
+        if self.category_key == "fishing":
+            metrics["count"] = len(filtered_tx)
+            income_tx = [t for t in filtered_tx if t['amount'] > 0]
+            metrics["avg_income"] = income / len(income_tx) if income_tx else 0
         
         # Previous Period Stats (for comparison)
         delta = end_date - start_date
@@ -283,22 +311,43 @@ class AnalyticsSubTab(QWidget):
         expense_growth = ((expense - prev_expense) / prev_expense * 100) if prev_expense else 0
 
         # 3. Update KPI Cards
-        self.update_kpi(income, expense, balance, income_growth, expense_growth)
+        self.update_kpi(income, expense, balance, income_growth, expense_growth, metrics)
         
         # 4. Update Charts
         self.update_charts(filtered_tx, start_date, end_date)
         
         # 5. Update Table
+        if not filtered_tx:
+            self.table.setRowCount(0)
+            self.show_no_data_message()
+            return
+        self.hide_no_data_message()
         self.update_table(filtered_tx)
 
-    def update_kpi(self, income, expense, balance, inc_growth, exp_growth):
+    def show_no_data_message(self):
+        if not hasattr(self, 'no_data_lbl'):
+            self.no_data_lbl = QLabel("Нет данных за выбранный период")
+            self.no_data_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.no_data_lbl.setStyleSheet("color: #7f8c8d; font-size: 16px; padding: 20px;")
+            # Insert above the table
+            idx = self.content_layout.indexOf(self.table)
+            self.content_layout.insertWidget(idx, self.no_data_lbl)
+        self.no_data_lbl.show()
+        self.table.hide()
+
+    def hide_no_data_message(self):
+        if hasattr(self, 'no_data_lbl'):
+            self.no_data_lbl.hide()
+        self.table.show()
+
+    def update_kpi(self, income, expense, balance, inc_growth, exp_growth, metrics=None):
         # Clear existing KPIs
         while self.kpi_layout.count():
             item = self.kpi_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
                 
-        def create_card(title, value, growth, is_positive_good=True):
+        def create_card(title, value, growth=None, is_positive_good=True, is_money=True):
             card = QFrame()
             card.setStyleSheet("background-color: #2b2b2b; border-radius: 8px; border: 1px solid #444;")
             l = QVBoxLayout(card)
@@ -307,21 +356,30 @@ class AnalyticsSubTab(QWidget):
             lbl_title.setStyleSheet("color: #aaa; font-size: 12px;")
             l.addWidget(lbl_title)
             
-            lbl_val = QLabel(f"${value:,.0f}")
+            val_str = f"${value:,.0f}" if is_money else f"{value:,.0f}"
+            lbl_val = QLabel(val_str)
             lbl_val.setStyleSheet("color: white; font-size: 20px; font-weight: bold;")
             l.addWidget(lbl_val)
             
             # Growth indicator
-            color = "#2ecc71" if (growth >= 0 and is_positive_good) or (growth < 0 and not is_positive_good) else "#e74c3c"
-            arrow = "▲" if growth >= 0 else "▼"
-            lbl_growth = QLabel(f"{arrow} {abs(growth):.1f}%")
-            lbl_growth.setStyleSheet(f"color: {color}; font-size: 11px;")
-            l.addWidget(lbl_growth)
+            if growth is not None:
+                color = "#2ecc71" if (growth >= 0 and is_positive_good) or (growth < 0 and not is_positive_good) else "#e74c3c"
+                arrow = "▲" if growth >= 0 else "▼"
+                lbl_growth = QLabel(f"{arrow} {abs(growth):.1f}%")
+                lbl_growth.setStyleSheet(f"color: {color}; font-size: 11px;")
+                l.addWidget(lbl_growth)
+            else:
+                l.addWidget(QLabel("")) # Spacer
             
             return card
 
         self.kpi_layout.addWidget(create_card("Доход", income, inc_growth, True))
         self.kpi_layout.addWidget(create_card("Расход", expense, exp_growth, False))
+        
+        if self.category_key == "fishing" and metrics:
+            self.kpi_layout.addWidget(create_card("Операций", metrics.get("count", 0), None, True, False))
+            self.kpi_layout.addWidget(create_card("Средний чек", metrics.get("avg_income", 0), None, True, True))
+
         self.kpi_layout.addWidget(create_card("Чистая прибыль", balance, 0, True))
         
         # Global Total (only if Weekly View)

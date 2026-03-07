@@ -72,3 +72,64 @@ def format_license_date(date_str):
         pass
 
     return "Неверный формат"
+
+class Money:
+    """Handles monetary values in minor units (cents/kopecks)."""
+    def __init__(self, amount_in_minor=0):
+        self.amount = int(round(amount_in_minor))
+
+    @classmethod
+    def from_major(cls, amount_in_major):
+        """Creates Money from major unit (float/int dollars)."""
+        try:
+            return cls(round(float(amount_in_major) * 100))
+        except (ValueError, TypeError):
+            return cls(0)
+
+    def to_major(self):
+        """Returns value in major unit (float dollars)."""
+        return self.amount / 100.0
+
+    def format(self, symbol="$"):
+        """Formats for display."""
+        return f"{symbol}{self.to_major():,.2f}"
+
+    def __add__(self, other):
+        if isinstance(other, Money):
+            return Money(self.amount + other.amount)
+        return Money(self.amount + round(other * 100))
+
+    def __sub__(self, other):
+        if isinstance(other, Money):
+            return Money(self.amount - other.amount)
+        return Money(self.amount - round(other * 100))
+    
+    def __mul__(self, other):
+        return Money(round(self.amount * other))
+    
+    def __truediv__(self, other):
+        return Money(round(self.amount / other))
+
+    def __abs__(self):
+        return Money(abs(self.amount))
+
+    def __lt__(self, other):
+        if isinstance(other, Money): return self.amount < other.amount
+        return self.to_major() < other
+
+    def __le__(self, other):
+        if isinstance(other, Money): return self.amount <= other.amount
+        return self.to_major() <= other
+
+    def __gt__(self, other):
+        if isinstance(other, Money): return self.amount > other.amount
+        return self.to_major() > other
+
+    def __ge__(self, other):
+        if isinstance(other, Money): return self.amount >= other.amount
+        return self.to_major() >= other
+
+    def __eq__(self, other):
+        if isinstance(other, Money): return self.amount == other.amount
+        return self.to_major() == other
+

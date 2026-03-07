@@ -6,7 +6,6 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 import os
 import hashlib
-import hashlib
 
 main_routes = Blueprint('main', __name__)
 
@@ -19,20 +18,20 @@ def get_server_settings():
     try:
         settings = ServerSettings.query.first()
         if not settings:
-            settings = ServerSettings(current_version="7.2.1")
+            settings = ServerSettings(current_version="9.0.1")
             db.session.add(settings)
             db.session.commit()
         # Auto-update version in DB if it's outdated
-        elif settings.current_version in ["7.1.1", "7.1.2", "7.0.0", "7.2.0"]:
-            settings.current_version = "7.2.1"
+        elif settings.current_version in ["7.1.1", "7.1.2", "7.0.0", "7.2.0", "7.2.1", "9.0.0"]:
+            settings.current_version = "9.0.1"
             db.session.commit()
         return settings
     except Exception as e:
-        print(f"DB Error in get_server_settings: {e}")
+        current_app.logger.error(f"DB Error in get_server_settings: {e}")
         # Return a dummy object if DB is read-only or fails
         # We need an object with attributes: current_version, force_update
         class DummySettings:
-            current_version = "7.2.1"
+            current_version = "9.0.1"
             force_update = False
         return DummySettings()
 
@@ -54,7 +53,7 @@ def update_info():
                     h.update(chunk)
             signature = h.hexdigest()
     except Exception as e:
-        print(f"ERROR: Failed to compute signature: {e}")
+        current_app.logger.error(f"ERROR: Failed to compute signature: {e}")
         signature = None
     
     response = {
@@ -77,7 +76,7 @@ def download_update():
     update_dir = os.path.join(base_dir, UPDATE_FOLDER)
     file_path = os.path.join(update_dir, filename)
     
-    print(f"DEBUG: Trying to serve {filename} from {file_path}")
+    current_app.logger.info(f"Serving update file: {filename}")
     
     if os.path.exists(file_path):
         return send_file(file_path, as_attachment=True)
@@ -87,7 +86,7 @@ def download_update():
         if os.path.exists(fallback_path):
              return send_file(fallback_path, as_attachment=True)
              
-        print(f"ERROR: File {filename} not found at {file_path} or {fallback_path}")
+        current_app.logger.error(f"File {filename} not found at {file_path} or {fallback_path}")
         return jsonify({"error": f"File {filename} not found."}), 404
 
 @main_routes.route('/api/force_update', methods=['POST'])

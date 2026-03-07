@@ -1,4 +1,4 @@
-from web import create_app
+from web import create_app, socketio
 
 app = create_app()
 
@@ -7,4 +7,4 @@ if __name__ == '__main__':
     # Use port 5000 by default
     print("Starting Perekyp Web Server...")
     print("Go to http://localhost:5000 to view the new design.")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True)

@@ -48,11 +48,68 @@ class RentCarTab(GenericTab):
         
         # Initially hide if empty? No, handled in refresh
         
+    def apply_theme(self, theme_name):
+        super().apply_theme(theme_name)
+        self.update_balance_editability()
+
     def refresh_data(self):
         super().refresh_data()
+        self.update_balance_editability()
         if hasattr(self, 'rentals_cards_layout'):
             self.update_active_rentals()
+
+    def update_balance_editability(self):
+        """Enable or disable manual balance editing based on settings."""
+        if not hasattr(self, 'stat_balance'): return
         
+        is_manual = self.data_manager.get_setting("allowManualBalanceEdit", False)
+        
+        if is_manual:
+            self.stat_balance.value_label.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.stat_balance.value_label.setToolTip("Нажмите дважды для изменения баланса вручную")
+        else:
+            self.stat_balance.value_label.setCursor(Qt.CursorShape.ArrowCursor)
+            self.stat_balance.value_label.setToolTip("")
+
+    def on_balance_clicked(self):
+        # Explanatory message if disabled
+        if not self.data_manager.get_setting("allowManualBalanceEdit", False):
+            QMessageBox.information(
+                self, "Информация", 
+                "Для изменения баланса включите опцию «Разрешить ручное редактирование баланса» в Настройках → Управление балансом"
+            )
+            return
+            
+        # Call start_inline_balance_edit from base class instead of old dialog logic
+        if hasattr(self, 'start_inline_balance_edit'):
+            self.start_inline_balance_edit()
+        else:
+            # Fallback if somehow not available
+            from PyQt6.QtWidgets import QInputDialog
+            current_val = self.data_manager.get_total_capital_balance()["liquid_cash"]
+            
+            dialog = QInputDialog(self)
+            dialog.setWindowTitle("Ручное редактирование")
+            dialog.setLabelText("Введите новый текущий баланс ($):")
+            dialog.setDoubleValue(current_val)
+            dialog.setDoubleRange(-1000000000, 1000000000)
+            dialog.setDoubleDecimals(2)
+            
+            if dialog.exec():
+                new_val = dialog.doubleValue()
+                self.update_balance_via_api(new_val)
+
+    def setup_stats(self):
+        super().setup_stats()
+        # Connect DOUBLE click to the balance label
+        self.stat_balance.value_label.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        if obj == self.stat_balance.value_label and event.type() == event.Type.MouseButtonDblClick:
+            self.on_balance_clicked()
+            return True
+        return super().eventFilter(obj, event)
+
     def update_active_rentals(self):
         if not hasattr(self, 'rentals_cards_layout'):
             return

@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton, QGraphicsDropShadowEffect
+from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton, QGraphicsDropShadowEffect, QApplication
 from PyQt6.QtCore import Qt, QPoint
 from PyQt6.QtGui import QColor, QIcon, QPixmap
 import os
@@ -58,6 +58,15 @@ class CustomTitleBar(QWidget):
         
         self.layout.addStretch()
 
+        # Chat Button (AI Chat / Calculator)
+        self.chat_btn = QPushButton("🤖 Чат ИИ")
+        self.chat_btn.setObjectName("TitleBarButton")
+        self.chat_btn.setFixedHeight(40)
+        self.chat_btn.setMinimumWidth(150) # Increased from 120 to avoid "калькулято"
+        self.chat_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.chat_btn.setVisible(False) # Hidden by default
+        self.layout.addWidget(self.chat_btn)
+
         # Active Profile Label
         self.active_profile_label = QLabel("")
         self.active_profile_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -101,22 +110,27 @@ class CustomTitleBar(QWidget):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            self.isDragging = True
-            self.dragPosition = event.globalPosition().toPoint() - self.parent.frameGeometry().topLeft()
-            event.accept()
+            # Allow dragging from any point of the title bar that isn't a button
+            if self.childAt(event.position().toPoint()) in [None, self.title_label, self.icon_label]:
+                self.isDragging = True
+                self.dragPosition = event.globalPosition().toPoint() - self.parent.pos()
+                event.accept()
 
     def mouseMoveEvent(self, event):
         if self.isDragging and event.buttons() & Qt.MouseButton.LeftButton:
-            self.parent.move(event.globalPosition().toPoint() - self.dragPosition)
+            new_pos = event.globalPosition().toPoint() - self.dragPosition
+            
+            # Ensure window stays within screen boundaries (optional, but requested)
+            screen = QApplication.primaryScreen().availableGeometry()
+            x = max(screen.left(), min(new_pos.x(), screen.right() - self.parent.width()))
+            y = max(screen.top(), min(new_pos.y(), screen.bottom() - self.parent.height()))
+            
+            self.parent.move(x, y)
             event.accept()
-        else:
-            # If button is released but we missed the event, stop dragging
-            self.isDragging = False
 
     def mouseReleaseEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.isDragging = False
-            event.accept()
+        self.isDragging = False
+        event.accept()
 
     def minimize_window(self):
         self.parent.showMinimized()

@@ -15,6 +15,7 @@ from gui.styles import StyleManager
 from data_manager import DataManager
 from utils import resource_path
 from version import VERSION, APP_NAME, APP_ID
+from startup_manager import StartupManager
 
 def setup_logging():
     app_data = os.getenv('LOCALAPPDATA') or os.path.expanduser('~')
@@ -83,6 +84,43 @@ def main():
         app.setWindowIcon(QIcon(icon_resource))
     else:
         logging.warning(f"Icon not found at resource_path: {icon_resource}")
+
+    # --- STARTUP CHECKS ---
+    startup_mgr = StartupManager(APP_ID)
+    
+    # 1. Single Instance Check
+    if not startup_mgr.check_single_instance():
+        logging.warning("Another instance is already running. Exiting.")
+        # Можно добавить активацию существующего окна, но пока просто выход
+        # Используем QSystemTrayIcon или просто MessageBox, если хотим уведомить
+        # Но лучше просто тихо выйти или развернуть существующее (сложно без IPC)
+        sys.exit(0)
+
+    # 2. Permissions Check
+    # Проверяем папку данных и логов
+    app_data = os.getenv('LOCALAPPDATA') or os.path.expanduser('~')
+    money_tracker_dir = os.path.join(app_data, "MoneyTracker")
+    logs_dir = os.path.join(money_tracker_dir, "logs")
+    
+    # Если портативный режим (есть data.json рядом), проверяем текущую папку
+    is_portable = False
+    if getattr(sys, 'frozen', False):
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        
+    if os.path.exists(os.path.join(base_dir, "data.json")):
+        is_portable = True
+        check_dirs = [base_dir]
+    else:
+        check_dirs = [money_tracker_dir, logs_dir]
+
+    if not startup_mgr.check_write_permissions(check_dirs):
+        sys.exit(1)
+        
+    # 3. Version Integrity
+    startup_mgr.validate_version_integrity()
+    # ----------------------
 
     # -------------------------------
     # GLOBAL APPLICATION ICON (FIX)

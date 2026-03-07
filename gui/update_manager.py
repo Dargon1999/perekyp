@@ -119,12 +119,12 @@ class DownloadWorker(QThread):
             if self.signature:
                 self.status.emit("Проверка целостности файла...")
                 calc = h.hexdigest()
-                if calc != self.signature:
+                if calc.lower() != self.signature.lower():
                     try:
                         os.remove(self.dest_path)
                     except:
                         pass
-                    self.finished.emit(False, "Bad signature")
+                    self.finished.emit(False, f"Bad signature: expected {self.signature}, got {calc}")
                     return
             
             self.status.emit("Загрузка завершена.")
