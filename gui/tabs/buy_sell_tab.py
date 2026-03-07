@@ -188,10 +188,16 @@ class TradeItemWidget(QWidget):
         
         self.image_label.setStyleSheet(f"border: 2px dashed {t['border']}; border-radius: 10px; color: {t['text_secondary']}; background-color: {t['input_bg']};")
 
-        self.stat_income.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {t['text_secondary']};")
-        self.stat_sold.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {t['text_secondary']};")
-        self.stat_profit.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {t['text_secondary']};")
-        
+        # Style new stat cards
+        card_style = f"""
+            background-color: {t['bg_secondary']}99;
+            border: 1px solid {t['border']};
+            border-radius: 12px;
+        """
+        self.card_purchases.setStyleSheet(card_style)
+        self.card_sales.setStyleSheet(card_style)
+        self.card_profit.setStyleSheet(card_style)
+
         btn_style = f"""
             QPushButton {{
                 background-color: transparent; 
@@ -300,35 +306,82 @@ class TradeItemWidget(QWidget):
         self.right_panel = QWidget()
         layout = QVBoxLayout(self.right_panel)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(15)
         
-        header_layout = QHBoxLayout()
+        # --- Financial Stats Section ---
+        self.stats_container = QWidget()
+        stats_layout = QHBoxLayout(self.stats_container)
+        stats_layout.setContentsMargins(0, 0, 0, 0)
+        stats_layout.setSpacing(10)
+
+        # Helper to create a stat card
+        def create_stat_card(title, icon, color):
+            card = QFrame()
+            card.setObjectName("StatCard")
+            card.setStyleSheet(f"""
+                #StatCard {{
+                    background-color: rgba(44, 62, 80, 0.6);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border-radius: 12px;
+                }}
+            """)
+            card_layout = QVBoxLayout(card)
+            card_layout.setContentsMargins(15, 12, 15, 12)
+            card_layout.setSpacing(4)
+
+            header = QHBoxLayout()
+            icon_lbl = QLabel(icon)
+            icon_lbl.setStyleSheet(f"font-size: 18px; color: {color};")
+            title_lbl = QLabel(title)
+            title_lbl.setStyleSheet("font-size: 12px; color: #95a5a6; font-weight: bold; text-transform: uppercase;")
+            header.addWidget(icon_lbl)
+            header.addWidget(title_lbl)
+            header.addStretch()
+            card_layout.addLayout(header)
+
+            val_lbl = QLabel("$0")
+            val_lbl.setStyleSheet(f"font-size: 22px; font-weight: 800; color: {color}; font-family: 'Segoe UI', sans-serif;")
+            card_layout.addWidget(val_lbl)
+            
+            return card, val_lbl
+
+        # Create Cards
+        self.card_purchases, self.val_purchases = create_stat_card("Покупки", "📥", "#e74c3c")
+        self.card_sales, self.val_sales = create_stat_card("Продажи", "📤", "#3498db")
+        self.card_profit, self.val_profit = create_stat_card("Доход", "💰", "#2ecc71")
+
+        stats_layout.addWidget(self.card_purchases, 1)
+        stats_layout.addWidget(self.card_sales, 1)
+        stats_layout.addWidget(self.card_profit, 1)
         
-        self.stat_income = QLabel("Покупки: $0")
-        self.stat_sold = QLabel("Продажи: $0")
-        self.stat_profit = QLabel("Доход: $0")
-        
-        header_layout.addWidget(self.stat_income)
-        header_layout.addWidget(self.stat_sold)
-        header_layout.addWidget(self.stat_profit)
-        header_layout.addStretch()
+        layout.addWidget(self.stats_container)
+
+        # --- View Controls Section ---
+        controls_layout = QHBoxLayout()
         
         self.view_inventory_btn = QPushButton("📦 Склад")
         self.view_sold_btn = QPushButton("⁝ Продано")
         self.export_excel_btn = QPushButton("📊 Excel")
         
+        for btn in [self.view_inventory_btn, self.view_sold_btn, self.export_excel_btn]:
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setFixedHeight(38)
+            btn.setMinimumWidth(100)
+
         self.view_inventory_btn.setCheckable(True)
         self.view_sold_btn.setCheckable(True)
-        
         self.view_inventory_btn.setChecked(True)
+        
         self.view_inventory_btn.clicked.connect(lambda: self.switch_view(0))
         self.view_sold_btn.clicked.connect(lambda: self.switch_view(1))
         self.export_excel_btn.clicked.connect(self.export_data)
         
-        header_layout.addWidget(self.view_inventory_btn)
-        header_layout.addWidget(self.view_sold_btn)
-        header_layout.addWidget(self.export_excel_btn)
+        controls_layout.addWidget(self.view_inventory_btn)
+        controls_layout.addWidget(self.view_sold_btn)
+        controls_layout.addStretch()
+        controls_layout.addWidget(self.export_excel_btn)
         
-        layout.addLayout(header_layout)
+        layout.addLayout(controls_layout)
         
         self.stack = QStackedWidget()
         
@@ -482,9 +535,9 @@ class TradeItemWidget(QWidget):
         # Update Stats
         stats = self.data_manager.get_category_stats(self.category_key)
         if stats:
-            self.stat_income.setText(f"Покупки: ${stats['expenses']:,.2f}")
-            self.stat_sold.setText(f"Продажи: ${stats['income']:,.2f}")
-            self.stat_profit.setText(f"Доход: ${stats['pure_profit']:,.2f}")
+            self.val_purchases.setText(f"${stats['expenses']:,.2f}")
+            self.val_sales.setText(f"${stats['income']:,.2f}")
+            self.val_profit.setText(f"${stats['pure_profit']:,.2f}")
             
         # Update Lists
         self.update_inventory_list()

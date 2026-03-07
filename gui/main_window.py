@@ -6,6 +6,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer, QSize, QPropertyAnimation, QEasingCurve, QParallelAnimationGroup, QPoint
 from PyQt6.QtGui import QGuiApplication, QIcon, QAction, QCloseEvent, QShortcut, QKeySequence
 import os
+import logging
+import traceback
 from data_manager import DataManager
 from utils import resource_path
 from gui.title_bar import CustomTitleBar
@@ -143,11 +145,28 @@ class MainWindow(QMainWindow):
         self.sidebar.setFixedWidth(self.sidebar_width)
         self.is_sidebar_collapsed = False
         
-        self.sidebar_layout = QVBoxLayout(self.sidebar)
+        # Add Scroll Area for Sidebar to prevent clipping on small screens/high DPI
+        self.sidebar_scroll = QScrollArea()
+        self.sidebar_scroll.setWidgetResizable(True)
+        self.sidebar_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.sidebar_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.sidebar_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.sidebar_scroll.setStyleSheet("background: transparent; border: none;")
+        
+        self.sidebar_container = QWidget()
+        self.sidebar_container.setObjectName("SideBarContainer")
+        self.sidebar_layout = QVBoxLayout(self.sidebar_container)
         self.sidebar_layout.setContentsMargins(10, 20, 10, 20)
         self.sidebar_layout.setSpacing(10)
         
-        # Sidebar Header (Toggle Button)
+        self.sidebar_scroll.setWidget(self.sidebar_container)
+        
+        # Layout for the sidebar widget itself to hold the scroll area
+        sidebar_main_layout = QVBoxLayout(self.sidebar)
+        sidebar_main_layout.setContentsMargins(0, 0, 0, 0)
+        sidebar_main_layout.addWidget(self.sidebar_scroll)
+        
+        # Sidebar Header (Toggle Button) - Moved inside sidebar_container
         self.toggle_btn = QPushButton("☰")
         self.toggle_btn.setObjectName("NavButton")
         self.toggle_btn.setFixedSize(40, 40)
@@ -423,7 +442,6 @@ class MainWindow(QMainWindow):
             self.setup_tray_icon()
             
         except Exception as e:
-            import traceback
             error_msg = f"Critical error during interface loading:\n{str(e)}\n\n{traceback.format_exc()}"
             print(error_msg) # Print to console
             
@@ -445,6 +463,7 @@ class MainWindow(QMainWindow):
     def setup_tabs(self):
         # Helper to safely add tabs
         def safe_add_tab(tab_class, name, index, icon_name, key):
+            logging.info(f"Initializing tab: {name} ({key}) at index {index}")
             try:
                 if tab_class == GenericTab:
                     tab = GenericTab(self.data_manager, key, self)
@@ -455,9 +474,13 @@ class MainWindow(QMainWindow):
                 
                 self.tabs.addWidget(tab)
                 self.add_nav_btn(name, index, icon_name, key)
+                logging.info(f"Successfully loaded tab: {name}")
                 return tab
             except Exception as e:
-                print(f"Failed to load tab {name} ({key}): {e}")
+                err = f"Failed to load tab {name} ({key}): {e}"
+                logging.error(f"{err}\n{traceback.format_exc()}")
+                print(err)
+                
                 # Add a placeholder error tab
                 error_widget = QWidget()
                 layout = QVBoxLayout(error_widget)
@@ -488,7 +511,7 @@ class MainWindow(QMainWindow):
 
     def add_nav_btn(self, text, index, icon_name, key=None):
         icon_char = self.icon_map.get(icon_name, "?")
-        btn = NavButton(text, icon_char, index, self.sidebar)
+        btn = NavButton(text, icon_char, index, self.sidebar_container)
         if key:
             btn.setProperty("tab_key", key)
         self.nav_buttons_layout.addWidget(btn)
@@ -496,6 +519,7 @@ class MainWindow(QMainWindow):
 
     def update_tabs_visibility(self):
         hidden_tabs = self.data_manager.get_setting("hidden_tabs", [])
+        logging.info(f"Updating tabs visibility. Hidden tabs from settings: {hidden_tabs}")
         
         for btn in self.nav_group.buttons():
             if not isinstance(btn, NavButton): continue
@@ -509,9 +533,11 @@ class MainWindow(QMainWindow):
             # Check if key is in hidden_tabs list
             visible = key not in hidden_tabs
             btn.setVisible(visible)
+            logging.debug(f"Tab '{key}' visibility set to {visible}")
             
             # If current tab is hidden, switch to default
             if not visible and self.tabs.currentIndex() == btn.property("page_index"):
+                 logging.info(f"Current tab {key} is hidden, switching to default.")
                  # Try to switch to settings
                  self.tabs.setCurrentIndex(10) # Settings
 

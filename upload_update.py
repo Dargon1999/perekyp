@@ -48,7 +48,7 @@ if __name__ == "__main__":
         print(f"Warning: updater.exe not found at {updater_path}")
 
     # 2. Upload main app
-    exe_path = os.path.join("Release_9.2.3", "MoneyTracker.exe")
+    exe_path = os.path.join("Release_9.2.4", "MoneyTracker.exe")
     if os.path.exists(exe_path):
         upload_update(exe_path, VERSION, is_updater=False)
     else:
