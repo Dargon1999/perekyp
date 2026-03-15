@@ -8,6 +8,7 @@ from PyQt6.QtGui import QPixmap, QImage, QIcon, QKeySequence, QShortcut, QImageR
 from PyQt6.QtWidgets import QApplication, QLabel
 import logging
 import os
+import traceback
 
 from gui.custom_dialogs import ConfirmationDialog, InputDialog, AlertDialog
 from gui.styles import StyleManager
@@ -486,6 +487,11 @@ class TradeItemWidget(QWidget):
 
     def set_preview_image(self, path):
         self.current_image_path = path
+        if not path:
+            self.image_label.setPixmap(QPixmap())
+            self.image_label.setText("Ctrl+V для вставки\nДвойной клик для выбора файла")
+            return
+            
         pixmap = self.data_manager.load_pixmap(path)
         if not pixmap.isNull():
             scaled = pixmap.scaled(self.image_label.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
@@ -495,49 +501,88 @@ class TradeItemWidget(QWidget):
             self.image_label.setText("Ошибка загрузки")
 
     def save_item(self):
-        name = self.name_input.text()
-        price = self.price_input.text()
-        coa_price = self.appearance_price_input.text() or "0"
-        note = self.note_input.toPlainText()
+        name = self.name_input.text().strip()
+        price_str = self.price_input.text().strip().replace(",", ".")
+        coa_str = self.appearance_price_input.text().strip().replace(",", ".") or "0"
+        note = self.note_input.toPlainText().strip()
         
-        if not name or not price:
-            AlertDialog(self, "Ошибка", "Заполните название и цену", "ОК").exec()
+        if not name:
+            AlertDialog(self, "Ошибка", "Введите название товара", "ОК").exec()
+            self.name_input.setFocus()
             return
+            
+        if not price_str:
+            AlertDialog(self, "Ошибка", "Введите цену покупки", "ОК").exec()
+            self.price_input.setFocus()
+            return
+            
         try:
-            float(price)
-            float(coa_price)
-        except ValueError:
-            AlertDialog(self, "Ошибка", "Цена должна быть числом", "ОК").exec()
+            price = float(price_str)
+            coa_price = float(coa_str)
+            
+            if price < 0 or coa_price < 0:
+                raise ValueError("Цена не может быть отрицательной")
+                
+        except ValueError as e:
+            AlertDialog(self, "Ошибка", f"Некорректная цена: {str(e)}", "ОК").exec()
             return
         
-        # Use generic method
-        self.data_manager.add_trade_item(
-            self.category_key, name, price, note, 
-            self.current_image_path, coa_price=coa_price
-        )
-        
-        self.name_input.clear()
-        self.price_input.clear()
-        self.appearance_price_input.clear()
-        self.note_input.clear()
-        self.set_preview_image(None)
-        self.image_label.setText("Ctrl+V для вставки\nДвойной клик для выбора файла")
-        
-        # Reset ad cost if enabled (Task 3)
-        if self.data_manager.get_setting("listing_cost_enabled", True):
-            ad_cost = self.data_manager.get_setting("listing_cost", 0.0)
-            if ad_cost > 0:
-                self.appearance_price_input.setText(str(ad_cost))
+        try:
+            # Show loading state
+            self.save_btn.setEnabled(False)
+            self.save_btn.setText("⌛ Сохранение...")
+            QApplication.processEvents()
+            
+            # Use generic method
+            success = self.data_manager.add_trade_item(
+                self.category_key, name, price, note, 
+                self.current_image_path, coa_price=coa_price
+            )
+            
+            if success:
+                # Success feedback
+                self.name_input.clear()
+                self.price_input.clear()
+                self.appearance_price_input.clear()
+                self.note_input.clear()
+                self.set_preview_image(None)
+                self.image_label.setText("Ctrl+V для вставки\nДвойной клик для выбора файла")
                 
-        self.refresh_data()
+                # Reset ad cost if enabled
+                if self.data_manager.get_setting("listing_cost_enabled", True):
+                    ad_cost = self.data_manager.get_setting("listing_cost", 0.0)
+                    if ad_cost > 0:
+                        self.appearance_price_input.setText(str(int(ad_cost)))
+                
+                # Visual success indicator
+                self.save_btn.setStyleSheet(self.save_btn.styleSheet() + "background-color: #2ecc71; color: white;")
+                self.save_btn.setText("✅ Сохранено!")
+                
+                QTimer.singleShot(1500, lambda: self.apply_theme(self.current_theme))
+                
+                logging.info(f"Successfully saved trade item: {name}")
+                self.refresh_data()
+            else:
+                raise Exception("DataManager returned False during save")
+                
+        except Exception as e:
+            logging.error(f"Error saving trade item: {e}\n{traceback.format_exc()}")
+            AlertDialog(self, "Ошибка сохранения", f"Произошла ошибка при сохранении:\n{str(e)}", "ОК").exec()
+        finally:
+            self.save_btn.setEnabled(True)
+            self.save_btn.setText("💾 Сохранить")
 
     def refresh_data(self):
         # Update Stats
         stats = self.data_manager.get_category_stats(self.category_key)
         if stats:
-            self.val_purchases.setText(f"${stats['expenses']:,.2f}")
-            self.val_sales.setText(f"${stats['income']:,.2f}")
-            self.val_profit.setText(f"${stats['pure_profit']:,.2f}")
+            self.val_purchases.setText(f"${int(stats['expenses']):,}")
+            self.val_sales.setText(f"${int(stats['income']):,}")
+            self.val_profit.setText(f"${int(stats['pure_profit']):,}")
+            
+        # Update Global Balance
+        if hasattr(self.main_window, 'update_balance_display'):
+            self.main_window.update_balance_display()
             
         # Update Lists
         self.update_inventory_list()
@@ -575,8 +620,21 @@ class TradeItemWidget(QWidget):
             # Icon
             icon_lbl = QLabel()
             icon_lbl.setFixedSize(60, 60)
-            pix = self.data_manager.load_pixmap(item.get("photo_path"), (60, 60))
-            icon_lbl.setPixmap(pix)
+            icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+            # Check both photo_path and image_path for compatibility
+            img_path = item.get("photo_path") or item.get("image_path")
+            
+            if img_path:
+                pix = self.data_manager.load_pixmap(img_path, (60, 60))
+                if not pix.isNull():
+                    icon_lbl.setPixmap(pix)
+                else:
+                    icon_lbl.setText("🖼️") # Fallback icon
+            else:
+                icon_lbl.setText("📦") # Default icon
+                
+            icon_lbl.setStyleSheet("background-color: rgba(0,0,0,0.2); border-radius: 4px; font-size: 24px;")
             row_layout.addWidget(icon_lbl)
             
             # Info
@@ -586,7 +644,7 @@ class TradeItemWidget(QWidget):
             info_layout.addWidget(name_lbl)
             
             if show_buy_price:
-                price_text = f"Куплено за: ${float(item.get('buy_price', 0)):,.2f}"
+                price_text = f"Куплено за: ${int(float(item.get('buy_price', 0))):,}"
                 price_lbl = QLabel(price_text)
                 info_layout.addWidget(price_lbl)
             
@@ -595,10 +653,10 @@ class TradeItemWidget(QWidget):
             # Cost of Appearance Column (Task 2)
             if show_coa:
                 coa_layout = QVBoxLayout()
-                coa_val = float(item.get('cost_of_appearance', 0))
+                coa_val = int(float(item.get('cost_of_appearance', 0)))
                 coa_lbl_title = QLabel("Стоимость появления")
                 coa_lbl_title.setStyleSheet("font-size: 11px; color: #7f8c8d;")
-                coa_lbl_val = QLabel(f"${coa_val:,.2f}")
+                coa_lbl_val = QLabel(f"${coa_val:,}")
                 coa_lbl_val.setStyleSheet("font-weight: bold; font-size: 13px; color: #f1c40f;")
                 coa_layout.addWidget(coa_lbl_title)
                 coa_layout.addWidget(coa_lbl_val)
@@ -657,10 +715,21 @@ class TradeItemWidget(QWidget):
             # Image (background of top area)
             img_lbl = QLabel()
             img_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            pix = self.data_manager.load_pixmap(item.get("photo_path"))
-            if not pix.isNull():
-                scaled = pix.scaled(180, 150, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-                img_lbl.setPixmap(scaled)
+            
+            # Check both photo_path and image_path
+            img_path = item.get("photo_path") or item.get("image_path")
+            
+            if img_path:
+                pix = self.data_manager.load_pixmap(img_path)
+                if not pix.isNull():
+                    scaled = pix.scaled(180, 150, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                    img_lbl.setPixmap(scaled)
+                else:
+                    img_lbl.setText("🖼️")
+            else:
+                img_lbl.setText("💰")
+                
+            img_lbl.setStyleSheet("font-size: 48px; background-color: rgba(0,0,0,0.1);")
             
             top_layout.addWidget(img_lbl, 0, 0)
 
@@ -690,23 +759,23 @@ class TradeItemWidget(QWidget):
             name_lbl.setWordWrap(True)
             info_layout.addWidget(name_lbl)
             
-            profit = float(item.get("sell_price", 0)) - float(item.get("buy_price", 0))
+            profit = int(float(item.get("sell_price", 0)) - float(item.get("buy_price", 0)))
             show_coa = self.data_manager.get_setting("showCostOfAppearance", False)
             if show_coa:
-                profit -= float(item.get("cost_of_appearance", 0))
+                profit -= int(float(item.get("cost_of_appearance", 0)))
                 
             color = "#2ecc71" if profit >= 0 else "#e74c3c"
             
-            price_info_text = f"Прод: ${float(item.get('sell_price', 0)):,.2f}"
+            price_info_text = f"Прод: ${int(float(item.get('sell_price', 0))):,}"
             if show_coa:
-                coa = float(item.get('cost_of_appearance', 0))
-                price_info_text += f" | Появ: ${coa:,.2f}"
+                coa = int(float(item.get('cost_of_appearance', 0)))
+                price_info_text += f" | Появ: ${coa:,}"
                 
             price_info = QLabel(price_info_text)
             price_info.setStyleSheet("color: #aaa; font-size: 12px;")
             info_layout.addWidget(price_info)
 
-            profit_lbl = QLabel(f"Прибыль: ${profit:,.2f}")
+            profit_lbl = QLabel(f"Прибыль: ${profit:,}")
             profit_lbl.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 13px;")
             info_layout.addWidget(profit_lbl)
             

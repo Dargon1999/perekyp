@@ -19,3 +19,12 @@ matplotlib
 bcrypt
 pyotp
 qrcode
+pytest
+pytest-qt
+mss
+opencv-python
+numpy
+pydirectinput
+keyboard
+mouse
+psutil

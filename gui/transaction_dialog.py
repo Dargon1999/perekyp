@@ -101,6 +101,7 @@ class TransactionDialog(QDialog, ResizeMixin):
         # Hide profile controls in dialog
         self.title_bar.profile_btn.hide()
         self.title_bar.active_profile_label.hide()
+        self.title_bar.balance_label.hide()
         
         # Add Calculator button to Title Bar for fishing
         if self.category == "fishing":

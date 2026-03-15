@@ -8,7 +8,11 @@ from PyQt6.QtGui import QGuiApplication, QIcon, QAction, QCloseEvent, QShortcut,
 import os
 import logging
 import traceback
+from event_bus import EventBus
 from data_manager import DataManager
+from database_manager import DatabaseManager
+from plugin_manager import PluginManager
+from gui.widgets.timeline_widget import TimelineWidget
 from utils import resource_path
 from gui.title_bar import CustomTitleBar
 from gui.custom_dialogs import StyledDialogBase, AlertDialog, UpdateConfirmDialog, UpdateProgressDialog
@@ -28,6 +32,7 @@ from gui.tabs.fishing_tab import FishingTab
 from gui.styles import StyleManager
 from gui.animations import AnimationManager
 from gui.update_manager import UpdateManager
+from gui.performance import PerformanceMonitor
 
 class NavButton(QPushButton):
     def __init__(self, text, icon_char, index, parent=None):
@@ -84,6 +89,14 @@ class MainWindow(QMainWindow):
         self.auth_manager = auth_manager
         
         self.data_manager = data_manager if data_manager else DataManager()
+        self.db_manager = DatabaseManager()
+        self.event_bus = EventBus.get_instance()
+        self.plugin_manager = PluginManager(app_context={"db": self.db_manager, "data": self.data_manager, "event_bus": self.event_bus})
+        self.plugin_manager.discover_plugins()
+        self.plugin_manager.initialize_plugins()
+        self.perf_monitor = PerformanceMonitor(self)
+        self.perf_monitor.start_timer()
+        
         self.update_manager = UpdateManager(self.data_manager, auth_manager=self.auth_manager)
         self.update_manager.update_available.connect(self.on_update_available)
 
@@ -195,12 +208,12 @@ class MainWindow(QMainWindow):
         self.tabs = QStackedWidget()
         self.content_area_layout.addWidget(self.tabs)
         
-        self.main_layout.addWidget(self.content_area)
-
         # Navigation Group
         self.nav_group = QButtonGroup(self)
         self.nav_group.setExclusive(True)
         self.nav_group.buttonClicked.connect(self.on_nav_clicked)
+
+        self.main_layout.addWidget(self.content_area)
 
         # Progressive Loading Setup
         self.loading_label = QLabel("Загрузка интерфейса...", self.content_area)
@@ -334,9 +347,11 @@ class MainWindow(QMainWindow):
         if self.update_manager:
             self.update_manager.stop()
 
-        # 4. Stop Timers Tab (internal timers)
-        if hasattr(self, 'timers_tab') and self.timers_tab:
-            self.timers_tab.stop()
+        # 4. Stop Timers Tab (internal timers if loaded)
+        for i in range(self.tabs.count()):
+            widget = self.tabs.widget(i)
+            if hasattr(widget, "stop"): # TimersTab has stop()
+                widget.stop()
 
         super().closeEvent(event)
 
@@ -406,14 +421,19 @@ class MainWindow(QMainWindow):
 
     def post_init_setup(self):
         """Deferred initialization of heavy UI components."""
+        import time
+        start_time = time.time()
         try:
+            logging.info("Starting post-init setup...")
             self.setup_tabs()
             self.apply_styles()
             self.refresh_data()
             
             # Switch to UI
-            self.loading_label.deleteLater()
             self.tabs.setVisible(True)
+            if self.loading_label:
+                self.loading_label.deleteLater()
+                self.loading_label = None
             
             # Ensure icon is set on the window handle
             icon_path = resource_path("icon_v2.ico")
@@ -441,6 +461,10 @@ class MainWindow(QMainWindow):
             # Setup System Tray
             self.setup_tray_icon()
             
+            self.perf_monitor.end_startup()
+            end_time = time.time()
+            logging.info(f"Post-init setup completed in {end_time - start_time:.2f} seconds")
+            
         except Exception as e:
             error_msg = f"Critical error during interface loading:\n{str(e)}\n\n{traceback.format_exc()}"
             print(error_msg) # Print to console
@@ -461,52 +485,107 @@ class MainWindow(QMainWindow):
             QApplication.quit()
 
     def setup_tabs(self):
-        # Helper to safely add tabs
-        def safe_add_tab(tab_class, name, index, icon_name, key):
-            logging.info(f"Initializing tab: {name} ({key}) at index {index}")
-            try:
-                if tab_class == GenericTab:
-                    tab = GenericTab(self.data_manager, key, self)
-                elif tab_class == SettingsTab:
-                    tab = SettingsTab(self.data_manager, self.auth_manager, self)
-                else:
-                    tab = tab_class(self.data_manager, self)
-                
-                self.tabs.addWidget(tab)
-                self.add_nav_btn(name, index, icon_name, key)
-                logging.info(f"Successfully loaded tab: {name}")
-                return tab
-            except Exception as e:
-                err = f"Failed to load tab {name} ({key}): {e}"
-                logging.error(f"{err}\n{traceback.format_exc()}")
-                print(err)
-                
-                # Add a placeholder error tab
-                error_widget = QWidget()
-                layout = QVBoxLayout(error_widget)
-                lbl = QLabel(f"Ошибка загрузки вкладки: {name}\n{str(e)}")
-                lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                lbl.setStyleSheet("color: red; font-size: 14px;")
-                layout.addWidget(lbl)
-                self.tabs.addWidget(error_widget)
-                self.add_nav_btn(name, index, icon_name, key)
-                return None
-
-        self.car_rental_tab = safe_add_tab(GenericTab, "Аренда авто", 0, "car", "car_rental")
-        self.clothes_tab = safe_add_tab(BuySellTab, "Покупка / Продажа", 1, "tshirt", "clothes")
-        self.mining_tab = safe_add_tab(MiningTab, "Добыча", 2, "hammer", "mining")
-        self.farm_bp_tab = safe_add_tab(FarmBPTab, "Фарм BP", 3, "leaf", "farm_bp")
-        self.memo_tab = safe_add_tab(MemoTab, "Блокнот", 4, "sticky-note", "memo")
-        self.helper_tab = safe_add_tab(HelperTab, "Помощник", 5, "magic", "helper")
-        self.cooking_tab = safe_add_tab(CookingTab, "Кулинария", 6, "utensils", "cooking")
-        self.analytics_tab = safe_add_tab(AnalyticsTab, "Аналитика", 7, "chart-bar", "analytics")
-        self.capital_planning_tab = safe_add_tab(CapitalPlanningTab, "Капитал", 8, "coins", "capital_planning")
-        self.timers_tab = safe_add_tab(TimersTab, "Таймер", 9, "clock", "timers")
-        self.fishing_tab = safe_add_tab(FishingTab, "Рыбалка", 10, "fish", "fishing")
-        self.settings_tab = safe_add_tab(SettingsTab, "Настройки", 11, "cog", "settings")
+        """Setup lazy-loading tabs configuration."""
+        self.tab_configs = [
+            (GenericTab, "Аренда авто", "car", "car_rental"),
+            (BuySellTab, "Покупка / Продажа", "tshirt", "clothes"),
+            (MiningTab, "Добыча", "hammer", "mining"),
+            (FarmBPTab, "Фарм BP", "leaf", "farm_bp"),
+            (MemoTab, "Блокнот", "sticky-note", "memo"),
+            (HelperTab, "Помощник", "magic", "helper"),
+            (CookingTab, "Кулинария", "utensils", "cooking"),
+            (AnalyticsTab, "Аналитика", "chart-bar", "analytics"),
+            (CapitalPlanningTab, "Капитал", "coins", "capital_planning"),
+            (TimersTab, "Таймер", "clock", "timers"),
+            (FishingTab, "Рыбалка", "fish", "fishing"),
+            (SettingsTab, "Настройки", "cog", "settings")
+        ]
         
+        # Create placeholders and navigation buttons
+        for i, (tab_class, name, icon_name, key) in enumerate(self.tab_configs):
+            # Add placeholder widget
+            placeholder = QWidget()
+            layout = QVBoxLayout(placeholder)
+            loading_lbl = QLabel("Загрузка...")
+            loading_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            loading_lbl.setStyleSheet("font-size: 16px; color: #aaa;")
+            layout.addWidget(loading_lbl)
+            self.tabs.addWidget(placeholder)
+            
+            # Add navigation button
+            self.add_nav_btn(name, i, icon_name, key)
+            
         # Initial visibility update
         self.update_tabs_visibility()
+        
+        # Load the startup tab from settings
+        startup_key = self.data_manager.get_setting("startup_tab", "car_rental")
+        startup_index = 0 # Fallback
+        for i, config in enumerate(self.tab_configs):
+            if config[3] == startup_key:
+                startup_index = i
+                break
+        
+        self.load_tab(startup_index)
+        self.tabs.setCurrentIndex(startup_index)
+        
+        # Sync navigation buttons
+        for btn in self.nav_group.buttons():
+            if btn.property("page_index") == startup_index:
+                btn.setChecked(True)
+                break
+
+    def load_tab(self, index):
+        """Actually initializes a tab if it's not already loaded."""
+        if index < 0 or index >= len(self.tab_configs):
+            return None
+            
+        # Check if it's already a real tab (not a placeholder)
+        current_widget = self.tabs.widget(index)
+        # If it's a real tab class, it won't be a generic QWidget with a single QLabel
+        # Better check: if it's an instance of our specific tab classes
+        tab_class, name, icon_name, key = self.tab_configs[index]
+        
+        if isinstance(current_widget, tab_class):
+            return current_widget
+            
+        # Initialize the real tab
+        logging.info(f"Lazy-loading tab: {name} ({key}) at index {index}")
+        try:
+            import time
+            start_t = time.time()
+            
+            if tab_class == GenericTab:
+                tab = GenericTab(self.data_manager, key, self)
+            elif tab_class == SettingsTab:
+                tab = SettingsTab(self.data_manager, self.auth_manager, self)
+            elif tab_class == TimelineWidget:
+                tab = TimelineWidget(self)
+                # Store reference for event bus if needed
+                self.timeline = tab
+                self.event_bus.event_emitted.connect(self.timeline.add_event)
+            else:
+                tab = tab_class(self.data_manager, self)
+            
+            # Apply theme if needed
+            theme = self.data_manager.get_setting("theme", "dark")
+            if hasattr(tab, "apply_theme"):
+                tab.apply_theme(theme)
+                
+            # Replace placeholder
+            old_widget = self.tabs.widget(index)
+            self.tabs.removeWidget(old_widget)
+            self.tabs.insertWidget(index, tab)
+            old_widget.deleteLater()
+            
+            end_t = time.time()
+            logging.info(f"Successfully loaded tab {name} in {end_t - start_t:.3f}s")
+            return tab
+            
+        except Exception as e:
+            err = f"Failed to lazy-load tab {name} ({key}): {e}"
+            logging.error(f"{err}\n{traceback.format_exc()}")
+            return None
 
 
     def add_nav_btn(self, text, index, icon_name, key=None):
@@ -539,16 +618,23 @@ class MainWindow(QMainWindow):
             if not visible and self.tabs.currentIndex() == btn.property("page_index"):
                  logging.info(f"Current tab {key} is hidden, switching to default.")
                  # Try to switch to settings
-                 self.tabs.setCurrentIndex(10) # Settings
+                 settings_idx = next((i for i, c in enumerate(self.tab_configs) if c[3] == "settings"), 0)
+                 self.tabs.setCurrentIndex(settings_idx) 
 
     def on_nav_clicked(self, btn):
         index = self.nav_group.id(btn)
-        self.tabs.setCurrentIndex(index)
         
-        # Refresh data for the tab
-        current_widget = self.tabs.currentWidget()
-        if hasattr(current_widget, "refresh_data"):
-            current_widget.refresh_data()
+        # Ensure tab is loaded
+        tab = self.load_tab(index)
+        if tab:
+            self.tabs.setCurrentIndex(index)
+            
+            # Refresh data for the tab
+            if hasattr(tab, "refresh_data"):
+                tab.refresh_data()
+        else:
+            # If load failed, maybe show error or stay on current
+            pass
 
     def open_ai_chat(self):
         # AI Chat is removed as per requirement
@@ -659,7 +745,24 @@ class MainWindow(QMainWindow):
             self.title_bar.active_profile_label.setText("Профиль не выбран")
             self.title_bar.active_profile_label.setVisible(True)
         
+        # Update Global Balance in Title Bar
+        self.update_balance_display()
+        
         # Refresh current tab
         current_widget = self.tabs.currentWidget()
         if hasattr(current_widget, "refresh_data"):
             current_widget.refresh_data()
+        
+        # Propagate to all tabs if needed (for global balance update)
+        for i in range(self.tabs.count()):
+            widget = self.tabs.widget(i)
+            if widget != current_widget and hasattr(widget, "update_realtime_goal"):
+                widget.update_realtime_goal()
+
+    def update_balance_display(self):
+        """Updates the global balance label in the title bar."""
+        try:
+            balance = self.data_manager.get_current_balance()
+            self.title_bar.balance_label.setText(f"💳 ${int(balance):,}")
+        except Exception as e:
+            logging.error(f"Error updating global balance display: {e}")

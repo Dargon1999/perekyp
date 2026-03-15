@@ -58,6 +58,9 @@ else:
 
 class DataManager(QObject):
     data_changed = pyqtSignal()
+    
+    # Static cache for pixmaps to avoid repeated file reads and scaling
+    _pixmap_cache = {}
 
     def __init__(self, filename=None):
         super().__init__()
@@ -162,11 +165,16 @@ class DataManager(QObject):
     def load_pixmap(self, path, max_size=None):
         """
         Loads a QPixmap from a path (file path or Base64 data URI).
-        Handles path resolution and errors.
+        Handles path resolution, caching and errors.
         """
         if not path:
             return QPixmap()
         
+        # 0. Check Cache
+        cache_key = f"{path}_{max_size}"
+        if cache_key in self._pixmap_cache:
+            return self._pixmap_cache[cache_key]
+            
         resolved = self.resolve_image_path(path)
         pix = QPixmap()
         
@@ -182,30 +190,28 @@ class DataManager(QObject):
 
         # 2. File Path Handling
         else:
-            if os.path.isdir(resolved):
-                logging.warning(f"Image path is a directory: {resolved}")
-                return self.get_placeholder_pixmap(text="Is Dir")
-                
-            if os.path.exists(resolved):
-                if os.path.getsize(resolved) == 0:
-                    logging.warning(f"Image file is empty: {resolved}")
-                    return self.get_placeholder_pixmap(text="Empty")
-                    
-                pix.load(resolved)
-                if pix.isNull():
-                    logging.warning(f"Failed to load image (unsupported format?): {resolved}")
-                    return self.get_placeholder_pixmap(text="Bad Format")
-            else:
-                logging.warning(f"Image file not found: {resolved}")
+            if not os.path.exists(resolved) or os.path.isdir(resolved):
+                logging.warning(f"Image not found or is dir: {resolved}")
                 return self.get_placeholder_pixmap(text="Missing")
-        
-        if pix.isNull():
-             return self.get_placeholder_pixmap(text="Error")
+                    
+            if os.path.getsize(resolved) == 0:
+                return self.get_placeholder_pixmap(text="Empty")
+                    
+            pix.load(resolved)
+            if pix.isNull():
+                return self.get_placeholder_pixmap(text="Bad Format")
 
         if max_size:
             w, h = max_size
             pix = pix.scaled(w, h, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
         
+        # 3. Store in Cache (Limit cache size to prevent memory leak)
+        if len(self._pixmap_cache) > 500:
+             # Simple eviction: clear 100 oldest items
+             keys_to_remove = list(self._pixmap_cache.keys())[:100]
+             for k in keys_to_remove: del self._pixmap_cache[k]
+             
+        self._pixmap_cache[cache_key] = pix
         return pix
 
     def save_image_to_base64(self, pixmap):
@@ -397,9 +403,9 @@ class DataManager(QObject):
         
         for attempt in range(max_retries):
             try:
-                # Write to temp file first
+                # Write to temp file first (minified JSON for performance and size)
                 with open(temp_file, "w", encoding="utf-8") as f:
-                    json.dump(self.data, f, indent=4, ensure_ascii=False)
+                    json.dump(self.data, f, ensure_ascii=False)
                 
                 # Atomic replace (renames are atomic on POSIX and modern Windows)
                 if os.path.exists(self.filename):
@@ -947,6 +953,72 @@ class DataManager(QObject):
 
     # --- Trade Methods (Generic) ---
 
+    def get_current_balance(self):
+        """Helper to get only liquid cash balance."""
+        return self.get_total_capital_balance()["liquid_cash"]
+
+    def add_trade_item(self, category, name, buy_price, note, image_path=None, coa_price=0.0):
+        """Adds a new item to the trade inventory."""
+        profile = self.get_active_profile()
+        if not profile:
+            logging.error(f"Cannot add trade item: No active profile. Category: {category}")
+            return False
+            
+        if category not in profile:
+            profile[category] = {"inventory": [], "sold_history": []}
+            
+        item = {
+            "id": str(uuid.uuid4()),
+            "name": name,
+            "buy_price": float(buy_price),
+            "cost_of_appearance": float(coa_price) if coa_price else 0.0,
+            "note": note,
+            "photo_path": image_path,
+            "date_added": datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+        }
+        
+        profile[category]["inventory"].append(item)
+        logging.info(f"Added trade item: {name} to {category}. Price: {buy_price}")
+        
+        self.save_data()
+        return True
+
+    def sell_trade_item(self, category, item_id, sell_price, date_sold=None):
+        """Moves an item from inventory to sold history."""
+        profile = self.get_active_profile()
+        if not profile or category not in profile: return False
+        
+        inventory = profile[category].get("inventory", [])
+        for i, item in enumerate(inventory):
+            if item["id"] == item_id:
+                item["sell_price"] = float(sell_price)
+                item["date_sold"] = date_sold or datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+                
+                profile[category]["sold_history"].append(item)
+                inventory.pop(i)
+                
+                logging.info(f"Sold trade item: {item['name']} from {category} for {sell_price}")
+                self.save_data()
+                return True
+        return False
+
+    def delete_trade_item(self, category, item_id, is_sold=False):
+        """Deletes an item from inventory or sold history."""
+        profile = self.get_active_profile()
+        if not profile or category not in profile: return False
+        
+        list_key = "sold_history" if is_sold else "inventory"
+        target_list = profile[category].get(list_key, [])
+        
+        original_len = len(target_list)
+        profile[category][list_key] = [item for item in target_list if item["id"] != item_id]
+        
+        if len(profile[category][list_key]) < original_len:
+            logging.info(f"Deleted trade item {item_id} from {category} ({list_key})")
+            self.save_data()
+            return True
+        return False
+
     def get_trade_inventory(self, category):
         profile = self.get_active_profile()
         if not profile: return []
@@ -1399,117 +1471,6 @@ class DataManager(QObject):
                 names.add(name)
         
         return sorted(list(names))
-
-    def add_trade_item(self, category, name, buy_price, note, photo_path):
-        profile = self.get_active_profile()
-        if not profile: return False
-        
-        if category not in profile:
-            profile[category] = {"inventory": [], "sold_history": [], "starting_amount": 0}
-            
-        item = {
-            "id": str(uuid.uuid4()),
-            "name": name,
-            "buy_price": float(buy_price),
-            "note": note,
-            "photo_path": photo_path,
-            "date_added": datetime.now().strftime("%d.%m.%Y %H:%M"),
-            "status": "in_stock"
-        }
-        
-        if "inventory" not in profile[category]:
-             profile[category]["inventory"] = []
-             
-        profile[category]["inventory"].append(item)
-        self.save_data()
-        return True
-
-    def delete_trade_item(self, category, item_id, is_sold=False):
-        try:
-            profile = self.get_active_profile()
-            if not profile or category not in profile: 
-                logging.error(f"delete_trade_item: Profile or {category} section missing")
-                return False
-            
-            target_list = "sold_history" if is_sold else "inventory"
-            if target_list not in profile[category]: 
-                logging.warning(f"delete_trade_item: Target list {target_list} missing")
-                return False
-            
-            original_len = len(profile[category][target_list])
-            profile[category][target_list] = [
-                item for item in profile[category][target_list] 
-                if item.get("id") != item_id
-            ]
-            
-            if len(profile[category][target_list]) < original_len:
-                self.save_data()
-                logging.info(f"Deleted {category} item {item_id} from {target_list}")
-                return True
-            
-            logging.warning(f"delete_trade_item: Item {item_id} not found in {target_list}")
-            return False
-        except Exception as e:
-            logging.exception(f"Error deleting {category} item {item_id}: {e}")
-            return False
-
-    def sell_trade_item(self, category, item_id, sell_price):
-        try:
-            profile = self.get_active_profile()
-            if not profile or category not in profile: 
-                logging.error(f"sell_trade_item: Profile or {category} section missing")
-                return False
-            
-            inventory = profile[category].get("inventory", [])
-            item_to_sell = None
-            
-            # Find item
-            for item in inventory:
-                if item.get("id") == item_id:
-                    item_to_sell = item
-                    break
-            
-            if not item_to_sell:
-                logging.warning(f"sell_trade_item: Item {item_id} not found in inventory")
-                return False
-                
-            # Move to sold
-            try:
-                # Ensure sell_price is valid
-                price_val = float(sell_price)
-                if price_val < 0:
-                     raise ValueError("Price cannot be negative")
-            except ValueError as ve:
-                logging.error(f"sell_trade_item: Invalid price {sell_price}: {ve}")
-                return False
-
-            item_to_sell["status"] = "sold"
-            item_to_sell["sell_price"] = price_val
-            item_to_sell["date_sold"] = datetime.now().strftime("%d.%m.%Y %H:%M")
-            
-            # Remove from inventory
-            profile[category]["inventory"] = [i for i in inventory if i.get("id") != item_id]
-            
-            # Add to sold history
-            if "sold_history" not in profile[category]:
-                profile[category]["sold_history"] = []
-                
-            profile[category]["sold_history"].append(item_to_sell)
-            
-            # Sort sold history by date sold (newest first)
-            try:
-                 profile[category]["sold_history"].sort(key=lambda x: datetime.strptime(x.get("date_sold", "01.01.1970 00:00"), "%d.%m.%Y %H:%M"), reverse=True)
-            except ValueError:
-                 logging.warning("sell_trade_item: Error sorting sold history by date")
-                 
-            self.save_data()
-            logging.info(f"Sold {category} item {item_id} for {price_val}")
-            return True
-        except Exception as e:
-            logging.exception(f"Error selling {category} item {item_id}: {e}")
-            return False
-
-    # --- Wrappers for Legacy Code ---
 
     def add_clothes_item(self, name, buy_price, note, photo_path):
         return self.add_trade_item("clothes", name, buy_price, note, photo_path)

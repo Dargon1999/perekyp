@@ -226,9 +226,11 @@ class LoginWindow(QDialog):
             self.on_login_finished(False, "Превышено время ожидания ответа от сервера (Timeout)", None)
 
     def on_login_finished(self, success, message, expires_at):
-        # Stop watchdog
+        # Stop watchdog and loading animation
         if hasattr(self, 'watchdog') and self.watchdog.isActive():
             self.watchdog.stop()
+        if hasattr(self, 'loading_timer') and self.loading_timer.isActive():
+            self.loading_timer.stop()
 
         self.login_input.setEnabled(True)
         self.password_input.setEnabled(True)

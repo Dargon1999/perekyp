@@ -1,32 +1,84 @@
 import sys
 import os
 import requests
+import logging
 from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QGraphicsOpacityEffect
-from PyQt6.QtCore import Qt, QUrl, pyqtSignal, QPropertyAnimation, QEasingCurve, QThread, QSize, QRect, QRectF
+from PyQt6.QtCore import (
+    Qt, QUrl, pyqtSignal, QPropertyAnimation, QEasingCurve, 
+    QThreadPool, QRunnable, QObject, QSize, QRect, QRectF
+)
+import hashlib
 from PyQt6.QtGui import QPixmap, QPainter, QPainterPath, QBrush, QColor, QImage
 
-class ImageLoader(QThread):
-    loaded = pyqtSignal(QPixmap)
-    failed = pyqtSignal()
+# --- Global Thread Pool ---
+# Using a single thread pool for all image loading operations application-wide
+# This prevents creating hundreds of threads and improves stability.
+global_image_thread_pool = QThreadPool()
+global_image_thread_pool.setMaxThreadCount(10) # Limit concurrent downloads
 
+# --- Cache Directory Setup ---
+app_data = os.getenv('LOCALAPPDATA') or os.path.expanduser('~')
+IMAGE_CACHE_DIR = os.path.join(app_data, "MoneyTracker", "image_cache")
+os.makedirs(IMAGE_CACHE_DIR, exist_ok=True)
+
+class ImageLoaderSignals(QObject):
+    """Custom signals for the QRunnable image loader."""
+    loaded = pyqtSignal(QImage) # Changed from QPixmap to QImage for thread safety
+    failed = pyqtSignal(str)
+
+class ImageLoader(QRunnable):
+    """A QRunnable task to download an image in the background via the global thread pool."""
     def __init__(self, url):
         super().__init__()
         self.url = url
+        self.signals = ImageLoaderSignals()
 
     def run(self):
         try:
-            response = requests.get(self.url, stream=True, timeout=10)
+            # 1. Check Local Cache
+            url_hash = hashlib.md5(self.url.encode()).hexdigest()
+            cache_path = os.path.join(IMAGE_CACHE_DIR, url_hash)
+            
+            if os.path.exists(cache_path):
+                image = QImage()
+                if image.load(cache_path):
+                    logging.info(f"[SmartImage] Loaded from local cache: {self.url}")
+                    self.signals.loaded.emit(image)
+                    return
+            
+            # 2. If not in cache, download
+            logging.info(f"[SmartImage] Starting download from thread pool: {self.url}")
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+            }
+            
+            response = requests.get(self.url, headers=headers, stream=True, timeout=20, allow_redirects=True)
+            
             if response.status_code == 200:
                 img_data = response.content
-                pixmap = QPixmap()
-                if pixmap.loadFromData(img_data):
-                    self.loaded.emit(pixmap)
+                # Save to cache
+                try:
+                    with open(cache_path, 'wb') as f:
+                        f.write(img_data)
+                except Exception as e:
+                    logging.warning(f"[SmartImage] Failed to save cache: {e}")
+                    
+                # Use QImage for background loading (QPixmap is not thread-safe)
+                image = QImage()
+                if image.loadFromData(img_data):
+                    logging.info(f"[SmartImage] Successfully loaded image data: {self.url} ({len(img_data)} bytes)")
+                    self.signals.loaded.emit(image)
                 else:
-                    self.failed.emit()
+                    logging.error(f"[SmartImage] Error parsing image data: {self.url}")
+                    self.signals.failed.emit("Parse Error")
             else:
-                self.failed.emit()
-        except Exception:
-            self.failed.emit()
+                logging.error(f"[SmartImage] HTTP Error {response.status_code}: {self.url}")
+                self.signals.failed.emit(f"HTTP {response.status_code}")
+        except Exception as e:
+            logging.error(f"[SmartImage] Exception during download {self.url}: {str(e)}")
+            self.signals.failed.emit(str(e))
 
 class SmartImageWidget(QWidget):
     clicked = pyqtSignal()
@@ -35,19 +87,15 @@ class SmartImageWidget(QWidget):
         super().__init__(parent)
         self.radius = radius
         self.pixmap = None
-        self.placeholder_text = "No Image"
+        self.placeholder_text = "Loading..."
+        self.error_text = ""
         self.keep_aspect_ratio = True
         self.hover_enabled = True
         self.is_loading = False
+        self.current_url = None # To track the active URL
         
-        # Opacity Effect for Fade In
-        self.opacity_effect = QGraphicsOpacityEffect(self)
-        self.opacity_effect.setOpacity(0.0)
-        self.setGraphicsEffect(self.opacity_effect)
-        
-        self.anim = QPropertyAnimation(self.opacity_effect, b"opacity")
-        self.anim.setDuration(500)
-        self.anim.setEasingCurve(QEasingCurve.Type.OutQuad)
+        # Simple fade-in without QGraphicsEffect for better stability
+        self.opacity = 1.0 
         
         # Hover Animation
         self.hover_scale = 1.0
@@ -56,40 +104,61 @@ class SmartImageWidget(QWidget):
         self.setMinimumSize(50, 50)
 
     def set_image_from_url(self, url):
+        if not url:
+            self.on_load_failed("No URL")
+            return
+
+        # Fix GitHub URLs (Independent checks for robustness)
+        fixed_url = url
+        if "github.com" in fixed_url:
+            fixed_url = fixed_url.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/")
+        
+        # Always remove query params for raw content if they exist
+        if "raw.githubusercontent.com" in fixed_url:
+            fixed_url = fixed_url.split("?")[0]
+        
+        # If a new URL is set while one is loading, this prevents the old one from displaying
+        self.current_url = fixed_url
+        
         self.is_loading = True
+        self.error_text = ""
+        self.pixmap = None # Clear previous image
+        self.placeholder_text = "Загрузка..."
         self.update()
-        self.loader = ImageLoader(url)
-        self.loader.loaded.connect(self.on_image_loaded)
-        self.loader.failed.connect(self.on_load_failed)
-        self.loader.start()
+        
+        # Use the global thread pool
+        loader = ImageLoader(fixed_url)
+        loader.signals.loaded.connect(lambda p, u=fixed_url: self.on_image_loaded(p, u))
+        loader.signals.failed.connect(lambda e, u=fixed_url: self.on_load_failed(e, u))
+        global_image_thread_pool.start(loader)
 
     def set_image_from_path(self, path):
+        self.current_url = None # It's a local path
         if os.path.exists(path):
-            pix = QPixmap(path)
-            if not pix.isNull():
-                self.on_image_loaded(pix)
+            img = QImage(path)
+            if not img.isNull():
+                self.on_image_loaded(img, path)
             else:
-                self.on_load_failed()
+                self.on_load_failed("Invalid local image", path)
         else:
-            self.on_load_failed()
+            self.on_load_failed("Path not found", path)
 
-    def on_image_loaded(self, pixmap):
-        self.pixmap = pixmap
-        self.is_loading = False
-        self.update()
-        self.fade_in()
+    def on_image_loaded(self, image, url):
+        # Only display the image if the URL is the one we currently want
+        if self.current_url == url:
+            # Convert QImage to QPixmap on the GUI thread
+            self.pixmap = QPixmap.fromImage(image)
+            self.is_loading = False
+            self.error_text = ""
+            self.update()
 
-    def on_load_failed(self):
-        self.is_loading = False
-        self.pixmap = None
-        self.placeholder_text = "Error"
-        self.update()
-        self.fade_in()
-
-    def fade_in(self):
-        self.anim.setStartValue(0.0)
-        self.anim.setEndValue(1.0)
-        self.anim.start()
+    def on_load_failed(self, error_msg="Error", url=None):
+        if self.current_url == url:
+            self.is_loading = False
+            self.pixmap = None
+            self.error_text = error_msg
+            self.placeholder_text = "❌"
+            self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)

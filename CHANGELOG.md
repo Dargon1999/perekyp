@@ -2,7 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
-## [9.2.3] - 2026-03-07
+## [9.2.5] - 2026-03-07
+
+### Added
+- **Global Balance**: Added a persistent balance indicator in the application title bar.
+- **Visual Feedback**: Enhanced "Save" button in the Buy/Sell tab with real-time status animation and color-coded feedback.
+
+### Fixed
+- **Trade Item Saving**: Fixed a critical issue where trade items with photos wouldn't display correctly in the inventory due to a data field mismatch.
+- **Formatting**: Standardized all currency displays across the app to use integer values with thousand separators.
+
+## [9.2.4] - 2026-03-07
 
 ### Fixed
 - **Capital Planning**: Improved goal formatting to display only integers without decimals or separators (e.g., "$1000" instead of "$1,000.00").

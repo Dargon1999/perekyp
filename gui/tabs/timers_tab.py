@@ -2,18 +2,436 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
     QScrollArea, QFrame, QDialog, QLineEdit, QComboBox, 
     QSpinBox, QProgressBar, QGridLayout, QMessageBox, QApplication, QStyle,
-    QSystemTrayIcon
+    QSystemTrayIcon, QCheckBox
 )
-from PyQt6.QtCore import Qt, QTimer, QSize, QRectF, QPointF, QRegularExpression
-from PyQt6.QtGui import QIcon, QFont, QPixmap, QPainter, QBrush, QColor, QPainterPath, QPolygonF, QRegularExpressionValidator
+from PyQt6.QtCore import Qt, QTimer, QSize, QRectF, QPointF, QRegularExpression, QUrl
+from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
+from PyQt6.QtGui import QIcon, QFont, QPixmap, QPainter, QBrush, QColor, QPainterPath, QPolygonF, QRegularExpressionValidator, QKeySequence, QShortcut
 from datetime import datetime, timedelta
 import math
 import logging
+import os
 
 from gui.styles import StyleManager
 from gui.custom_dialogs import AlertDialog, ConfirmationDialog, StyledDialogBase
+from utils import resource_path
 
 logger = logging.getLogger(__name__)
+
+class Switch(QCheckBox):
+    def __init__(self, parent=None, active_color="#3498db", bg_color="#444"):
+        super().__init__(parent)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._active_color = active_color
+        self._bg_color = bg_color
+        self.setMinimumSize(50, 26)
+        self.setFixedHeight(26)
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setPen(Qt.PenStyle.NoPen)
+        
+        # Draw background pill
+        rect = QRectF(0, 0, 50, 26)
+        if self.isChecked():
+            p.setBrush(QColor(self._active_color))
+        else:
+            p.setBrush(QColor(self._bg_color))
+        p.drawRoundedRect(rect, 13, 13)
+        
+        # Draw knob (circle)
+        p.setBrush(QColor("#ffffff"))
+        knob_pos = 26 if self.isChecked() else 2
+        p.drawEllipse(knob_pos, 2, 22, 22)
+        p.end()
+
+class OptionRow(QFrame):
+    def __init__(self, text, tooltip, is_checked, accent_color, input_bg, input_border, parent=None):
+        super().__init__(parent)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip(tooltip)
+        self.setStyleSheet(f"""
+            QFrame {{
+                background-color: {input_bg};
+                border-radius: 12px;
+                border: 1px solid {input_border};
+            }}
+            QFrame:hover {{
+                border: 1px solid {accent_color};
+            }}
+        """)
+        
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(15, 10, 15, 10)
+        
+        self.label = QLabel(text)
+        self.label.setStyleSheet("border: none; font-size: 14px; background: transparent;")
+        
+        self.switch = Switch(active_color=accent_color, bg_color="#444")
+        self.switch.setChecked(is_checked)
+        self.switch.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents) # Let Row handle clicks
+        
+        layout.addWidget(self.label)
+        layout.addStretch()
+        layout.addWidget(self.switch)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.switch.setChecked(not self.switch.isChecked())
+            event.accept()
+        else:
+            super().mousePressEvent(event)
+
+    def isChecked(self):
+        return self.switch.isChecked()
+
+class TimerSettingsDialog(StyledDialogBase):
+    def __init__(self, parent=None, data_manager=None):
+        super().__init__(parent, "Настройки таймера", width=500)
+        self.data_manager = data_manager
+        
+        # Explicitly set size to avoid squashing in StyledDialogBase
+        self.setMinimumHeight(550)
+        self.resize(500, 550)
+        
+        # Load theme colors
+        self.theme = StyledDialogBase._theme
+        t = StyleManager.get_theme(self.theme)
+        self.bg_color = t['bg_secondary']
+        self.text_color = t['text_main']
+        self.secondary_text_color = t['text_secondary']
+        self.input_bg = t['input_bg']
+        self.input_border = t['border']
+        self.accent_color = t['accent']
+        self.success_color = t['success']
+        self.danger_color = t['danger']
+        
+        # Audio setup
+        self.player = QMediaPlayer()
+        self.audio_output = QAudioOutput()
+        self.player.setAudioOutput(self.audio_output)
+        
+        # Connect player signals for feedback
+        self.player.playbackStateChanged.connect(self.on_playback_state_changed)
+        self.player.errorOccurred.connect(self.on_player_error)
+        
+        self.setup_settings_ui()
+        
+    def setup_settings_ui(self):
+        # Clear any existing layout content if needed, but here it's fresh
+        # Apply consistent padding and spacing
+        self.content_layout.setSpacing(30) # Increased spacing between sections
+        self.content_layout.setContentsMargins(30, 20, 30, 30)
+        
+        # --- Section 1: Sound ---
+        sound_section = QVBoxLayout()
+        sound_section.setSpacing(15)
+        
+        sound_label = QLabel("🎵 Звуковое уведомление:")
+        sound_label.setStyleSheet(f"color: {self.text_color}; font-size: 14px; font-weight: bold;")
+        sound_section.addWidget(sound_label)
+        
+        self.sound_combo = QComboBox()
+        self.sound_combo.setMinimumHeight(45) # Use minimum instead of fixed
+        self.sound_combo.setStyleSheet(f"""
+            QComboBox {{
+                background-color: {self.input_bg};
+                color: {self.text_color};
+                border: 1px solid {self.input_border};
+                border-radius: 10px;
+                padding: 0 15px;
+                font-size: 14px;
+            }}
+            QComboBox::drop-down {{
+                border: none;
+                width: 40px;
+            }}
+            QComboBox QAbstractItemView {{
+                background-color: {self.bg_color};
+                color: {self.text_color};
+                selection-background-color: {self.accent_color};
+                border: 1px solid {self.input_border};
+                outline: none;
+                padding: 8px;
+            }}
+        """)
+        
+        self.sounds = [
+            ("Стандартный", "beep.wav"),
+            ("Колокольчик", "bell.wav"),
+            ("Цифровой", "digital.wav"),
+            ("Сирена", "siren.wav"),
+            ("Электронный", "electronic.wav"),
+            ("Мягкий", "soft.wav"),
+            ("Внимание", "alert.wav")
+        ]
+        
+        for name, _ in self.sounds:
+            self.sound_combo.addItem(name)
+            
+        current_sound = self.data_manager.get_setting("timer_sound", "beep.wav")
+        for i, (name, file) in enumerate(self.sounds):
+            if file == current_sound:
+                self.sound_combo.setCurrentIndex(i)
+                break
+                
+        sound_section.addWidget(self.sound_combo)
+        
+        # Preview button
+        self.preview_btn = self.create_button("▶ Прослушать выбранный звук", "primary", self.preview_sound)
+        self.preview_btn.setFixedHeight(50)
+        self.preview_btn.setStyleSheet(self.preview_btn.styleSheet() + "font-size: 14px; font-weight: bold; border-radius: 10px;")
+        sound_section.addWidget(self.preview_btn)
+        
+        self.content_layout.addLayout(sound_section)
+        
+        # --- Section 2: Window Options ---
+        options_section = QVBoxLayout()
+        options_section.setSpacing(15)
+        
+        options_label = QLabel("🖥️ Параметры окна:")
+        options_label.setStyleSheet(f"color: {self.text_color}; font-size: 14px; font-weight: bold;")
+        options_section.addWidget(options_label)
+        
+        is_topmost = self.data_manager.get_setting("timer_topmost", False)
+        self.topmost_row = OptionRow(
+            "Показать поверх всех окон",
+            "При срабатывании таймера окно уведомления будет поверх всех окон и свернет остальные",
+            is_topmost,
+            self.accent_color, self.input_bg, self.input_border, self
+        )
+        options_section.addWidget(self.topmost_row)
+        
+        is_loop = self.data_manager.get_setting("timer_loop", False)
+        self.loop_row = OptionRow(
+            "Зациклить звук (повторять)",
+            "Звук будет повторяться до тех пор, пока вы не нажмете ОК или закроете уведомление",
+            is_loop,
+            self.accent_color, self.input_bg, self.input_border, self
+        )
+        options_section.addWidget(self.loop_row)
+        
+        self.content_layout.addLayout(options_section)
+        
+        self.content_layout.addStretch()
+        
+        # --- Footer: Actions ---
+        footer_layout = QHBoxLayout()
+        footer_layout.setSpacing(15)
+        
+        save_btn = self.create_button("💾 Сохранить", "success", self.save_settings)
+        save_btn.setFixedHeight(50)
+        save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        save_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {self.success_color};
+                color: white;
+                font-size: 14px;
+                font-weight: bold;
+                border-radius: 12px;
+                border: none;
+                padding: 10px;
+            }}
+            QPushButton:hover {{
+                background-color: #27ae60;
+                margin-top: -2px;
+            }}
+            QPushButton:pressed {{
+                margin-top: 1px;
+            }}
+        """)
+        
+        cancel_btn = self.create_button("❌ Отмена", "danger", self.reject)
+        cancel_btn.setFixedHeight(50)
+        cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        cancel_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {self.danger_color};
+                color: white;
+                font-size: 14px;
+                font-weight: bold;
+                border-radius: 12px;
+                border: none;
+                padding: 10px;
+            }}
+            QPushButton:hover {{
+                background-color: #c0392b;
+                margin-top: -2px;
+            }}
+            QPushButton:pressed {{
+                margin-top: 1px;
+            }}
+        """)
+        
+        footer_layout.addWidget(save_btn)
+        footer_layout.addWidget(cancel_btn)
+        self.content_layout.addLayout(footer_layout)
+
+    def preview_sound(self):
+        index = self.sound_combo.currentIndex()
+        if index >= 0:
+            sound_file = self.sounds[index][1]
+            sound_path = resource_path(os.path.join("assets", "sounds", sound_file))
+            
+            logger.info(f"Attempting to preview sound: {sound_path}")
+            
+            if os.path.exists(sound_path):
+                try:
+                    self.player.setSource(QUrl.fromLocalFile(sound_path))
+                    self.audio_output.setVolume(1.0)
+                    self.player.play()
+                    self.preview_btn.setText("⏳ Воспроизведение...")
+                    self.preview_btn.setEnabled(False)
+                except Exception as e:
+                    logger.error(f"Error during playback: {e}")
+                    self.preview_btn.setText("❌ Ошибка воспроизведения")
+                    QTimer.singleShot(2000, lambda: self.reset_preview_button())
+            else:
+                logger.error(f"Sound file not found: {sound_path}")
+                self.preview_btn.setText("❌ Файл не найден")
+                QApplication.beep()
+                QTimer.singleShot(2000, lambda: self.reset_preview_button())
+
+    def on_playback_state_changed(self, state):
+        if state == QMediaPlayer.PlaybackState.StoppedState:
+            self.reset_preview_button()
+
+    def on_player_error(self, error, error_str):
+        logger.error(f"MediaPlayer Error: {error_str} (Code: {error})")
+        self.preview_btn.setText(f"❌ Ошибка: {error}")
+        QTimer.singleShot(3000, lambda: self.reset_preview_button())
+
+    def reset_preview_button(self):
+        self.preview_btn.setText("▶ Прослушать выбранный звук")
+        self.preview_btn.setEnabled(True)
+
+    def save_settings(self):
+        index = self.sound_combo.currentIndex()
+        if index >= 0:
+            self.data_manager.set_setting("timer_sound", self.sounds[index][1])
+            
+        self.data_manager.set_setting("timer_topmost", self.topmost_row.isChecked())
+        self.data_manager.set_setting("timer_loop", self.loop_row.isChecked())
+        self.accept()
+
+class FullscreenNotification(QDialog):
+    def __init__(self, timer_name, sound_path=None, loop_sound=False):
+        super().__init__()
+        self.timer_name = timer_name
+        self.sound_path = sound_path
+        self.loop_sound = loop_sound
+        
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        
+        # Fullscreen
+        screen_geo = QApplication.primaryScreen().geometry()
+        self.setGeometry(screen_geo)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Dark overlay
+        overlay = QFrame()
+        overlay.setStyleSheet("background-color: rgba(0, 0, 0, 200);")
+        layout.addWidget(overlay)
+        
+        overlay_layout = QVBoxLayout(overlay)
+        overlay_layout.setContentsMargins(50, 50, 50, 50)
+        overlay_layout.setSpacing(30)
+        overlay_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Icon
+        icon_lbl = QLabel("⏰")
+        icon_lbl.setStyleSheet("font-size: 120px; color: #f1c40f;")
+        overlay_layout.addWidget(icon_lbl)
+        
+        # Title
+        title_lbl = QLabel("ТАЙМЕР ЗАВЕРШЕН!")
+        title_lbl.setStyleSheet("font-size: 48px; font-weight: bold; color: #e74c3c;")
+        overlay_layout.addWidget(title_lbl)
+        
+        # Message
+        msg_lbl = QLabel(f"Таймер «{timer_name}» истек!")
+        msg_lbl.setStyleSheet("font-size: 32px; color: white;")
+        msg_lbl.setWordWrap(True)
+        msg_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        overlay_layout.addWidget(msg_lbl)
+        
+        # Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(20)
+        
+        ok_btn = QPushButton("ОК")
+        ok_btn.setFixedSize(200, 60)
+        ok_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        ok_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2ecc71;
+                color: white;
+                font-size: 24px;
+                font-weight: bold;
+                border-radius: 10px;
+            }
+            QPushButton:hover { background-color: #27ae60; }
+        """)
+        ok_btn.clicked.connect(self.accept)
+        
+        snooze_btn = QPushButton("Отложить (5 мин)")
+        snooze_btn.setFixedSize(300, 60)
+        snooze_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        snooze_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3498db;
+                color: white;
+                font-size: 24px;
+                font-weight: bold;
+                border-radius: 10px;
+            }
+            QPushButton:hover { background-color: #2980b9; }
+        """)
+        snooze_btn.clicked.connect(self.snooze)
+        
+        btn_layout.addWidget(ok_btn)
+        btn_layout.addWidget(snooze_btn)
+        overlay_layout.addLayout(btn_layout)
+        
+        # ESC Shortcut
+        self.esc_shortcut = QShortcut(QKeySequence("Esc"), self)
+        self.esc_shortcut.activated.connect(self.reject)
+        
+        # Sound player
+        self.player = QMediaPlayer()
+        self.audio_output = QAudioOutput()
+        self.player.setAudioOutput(self.audio_output)
+        
+        if self.sound_path and os.path.exists(self.sound_path):
+            self.player.setSource(QUrl.fromLocalFile(self.sound_path))
+            self.audio_output.setVolume(1.0)
+            if self.loop_sound:
+                self.player.setLoops(QMediaPlayer.Loops.Infinite)
+            else:
+                self.player.setLoops(QMediaPlayer.Loops.Once)
+            self.player.play()
+        else:
+            QApplication.beep()
+
+    def snooze(self):
+        self.done(10) # Custom code for snooze
+
+    def closeEvent(self, event):
+        self.player.stop()
+        super().closeEvent(event)
+
+    def accept(self):
+        self.player.stop()
+        super().accept()
+
+    def reject(self):
+        self.player.stop()
+        super().reject()
+
 
 class AddTimerDialog(StyledDialogBase):
     def __init__(self, parent=None, timer_data=None):
@@ -442,6 +860,9 @@ class TimerCard(QFrame):
                     background-color: #f1c40f; 
                     border-radius: 20px; 
                     border: none; 
+                    color: white;
+                    font-size: 16px; /* Added */
+                    font-weight: bold; /* Added */
                 } 
                 QPushButton:hover { background-color: #f39c12; }
             """)
@@ -456,6 +877,9 @@ class TimerCard(QFrame):
                     background-color: #2ecc71; 
                     border-radius: 20px; 
                     border: none; 
+                    color: white;
+                    font-size: 16px; /* Added */
+                    font-weight: bold; /* Added */
                 } 
                 QPushButton:hover { background-color: #27ae60; }
             """)
@@ -569,6 +993,44 @@ class TimersTab(QWidget):
         title_lbl = QLabel("🕒 Таймер")
         title_lbl.setStyleSheet("font-size: 24px; font-weight: bold; color: white;")
         
+        self.settings_btn = QPushButton()
+        self.settings_btn.setFixedSize(40, 40)
+        self.settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.settings_btn.setToolTip("Настройки уведомлений")
+        
+        # Draw a custom gear icon using QPainter
+        pixmap = QPixmap(40, 40)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        
+        # Outer teeth
+        painter.setBrush(QColor("#ffffff"))
+        painter.translate(20, 20)
+        for _ in range(8):
+            painter.drawRoundedRect(-4, -16, 8, 32, 2, 2)
+            painter.rotate(45)
+            
+        # Main body
+        painter.drawEllipse(-11, -11, 22, 22)
+        
+        # Center hole (using transparent to see through if background changes)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
+        painter.drawEllipse(-6, -6, 12, 12)
+        painter.end()
+        
+        self.settings_btn.setIcon(QIcon(pixmap))
+        self.settings_btn.setIconSize(QSize(24, 24))
+        self.settings_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3b3b3b;
+                border-radius: 8px;
+            }
+            QPushButton:hover { background-color: #555; }
+        """)
+        self.settings_btn.clicked.connect(self.open_settings_dialog)
+        
         add_btn = QPushButton("➕ Добавить таймер")
         add_btn.setFixedSize(220, 40)
         add_btn.setStyleSheet("""
@@ -599,6 +1061,8 @@ class TimersTab(QWidget):
         self.filter_combo.currentTextChanged.connect(self.refresh_data)
 
         header_layout.addWidget(title_lbl)
+        header_layout.addWidget(self.settings_btn)
+        header_layout.addSpacing(10)
         header_layout.addWidget(add_btn)
         header_layout.addStretch()
         header_layout.addWidget(QLabel("Фильтр:"))
@@ -625,6 +1089,10 @@ class TimersTab(QWidget):
             name, t_type, duration = dialog.get_data()
             if self.data_manager.add_timer(name, t_type, duration):
                 self.refresh_data()
+
+    def open_settings_dialog(self):
+        dialog = TimerSettingsDialog(self, self.data_manager)
+        dialog.exec()
 
     def open_edit_timer_dialog(self, timer_data):
         dialog = AddTimerDialog(self, timer_data)
@@ -694,9 +1162,11 @@ class TimersTab(QWidget):
                     else:
                         # "notify_and_delete" or "notify_keep" or not a contract
                         self.trigger_notification(timer)
-                        self.notified_timers.add(timer["id"])
 
     def trigger_notification(self, timer):
+        # Mark as notified immediately to prevent double triggers
+        self.notified_timers.add(timer["id"])
+
         # Check if window is hidden (System Tray mode)
         if not self.main_window.isVisible() and hasattr(self.main_window, 'tray_icon'):
              self.main_window.tray_icon.showMessage(
@@ -705,6 +1175,15 @@ class TimersTab(QWidget):
                  QSystemTrayIcon.MessageIcon.Information,
                  5000
              )
+             
+             # Even in tray mode, play the selected sound
+             sound_file = self.data_manager.get_setting("timer_sound", "beep.wav")
+             sound_path = resource_path(os.path.join("assets", "sounds", sound_file))
+             if os.path.exists(sound_path):
+                 self.play_standalone_sound(sound_path)
+             else:
+                 QApplication.beep()
+
              # Handle auto-delete for tray notification
              mode = self.get_notification_mode()
              if mode == "notify_and_delete" and timer["type"] == "Контракт":
@@ -712,18 +1191,85 @@ class TimersTab(QWidget):
                  self.refresh_data()
              return
         
-        # Custom Dialog
-        dlg = TimerCompleteDialog(self, timer['name'])
-        # Make it stay on top
-        dlg.setWindowFlags(dlg.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        # Get settings
+        is_topmost = self.data_manager.get_setting("timer_topmost", False)
+        is_loop = self.data_manager.get_setting("timer_loop", False)
+        sound_file = self.data_manager.get_setting("timer_sound", "beep.wav")
+        sound_path = resource_path(os.path.join("assets", "sounds", sound_file))
+
+        if is_topmost:
+            # Minimize all windows (simulate Win+D)
+            # Note: This is a Windows-specific shell call, for cross-platform we can't easily do this without specific libs
+            # but we can at least make our window topmost and fullscreen.
+            if os.name == 'nt':
+                try:
+                    import ctypes
+                    ctypes.windll.user32.ShowCursor(True)
+                    # Minimize all windows (Win+D)
+                    import subprocess
+                    subprocess.run(["powershell", "-Command", "(New-Object -ComObject shell.application).minimizeall()"], capture_output=True)
+                except:
+                    pass
+            
+            # Show Fullscreen Notification
+            dlg = FullscreenNotification(timer['name'], sound_path, loop_sound=is_loop)
+            res = dlg.exec()
+            
+            if res == 10: # Snooze
+                self.snooze_timer(timer)
+            else:
+                self.on_notification_closed(timer)
+        else:
+            # Custom Dialog
+            dlg = TimerCompleteDialog(self, timer['name'])
+            # Make it stay on top
+            dlg.setWindowFlags(dlg.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+            
+            # Play sound
+            if os.path.exists(sound_path):
+                self.play_standalone_sound(sound_path, loop=is_loop)
+            else:
+                QApplication.beep()
+
+            # Handle deletion after dialog close
+            dlg.finished.connect(lambda result: self.on_notification_closed(timer))
+            dlg.show()
+            self._current_notification = dlg
+
+    def play_standalone_sound(self, sound_path, loop=False):
+        """Helper to play sound without a dedicated dialog."""
+        if not hasattr(self, '_standalone_player'):
+            self._standalone_player = QMediaPlayer()
+            self._standalone_audio = QAudioOutput()
+            self._standalone_player.setAudioOutput(self._standalone_audio)
         
-        # Handle deletion after dialog close
-        dlg.finished.connect(lambda result: self.on_notification_closed(timer))
-        
-        dlg.show()
-        
-        self._current_notification = dlg
-        
+        self._standalone_player.setSource(QUrl.fromLocalFile(sound_path))
+        self._standalone_audio.setVolume(1.0)
+        if loop:
+            self._standalone_player.setLoops(QMediaPlayer.Loops.Infinite)
+        else:
+            self._standalone_player.setLoops(QMediaPlayer.Loops.Once)
+        self._standalone_player.play()
+
+    def snooze_timer(self, timer):
+        """Snoozes the timer for 5 minutes."""
+        # Update timer in DB to +5 minutes from now
+        now = datetime.now().timestamp()
+        duration = 5 * 60
+        updates = {
+            "start_time": now,
+            "end_time": now + duration,
+            "duration": duration,
+            "is_running": True,
+            "paused_remaining": 0
+        }
+        if self.data_manager.update_timer(timer["id"], updates):
+            # Remove from notified set to allow re-notification
+            if timer["id"] in self.notified_timers:
+                self.notified_timers.remove(timer["id"])
+            self.refresh_data()
+            logger.info(f"Timer {timer['name']} snoozed for 5 minutes.")
+
     def on_notification_closed(self, timer):
         mode = self.get_notification_mode()
         if mode == "notify_and_delete" and timer["type"] == "Контракт":

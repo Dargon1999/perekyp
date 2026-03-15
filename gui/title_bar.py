@@ -73,6 +73,25 @@ class CustomTitleBar(QWidget):
         self.active_profile_label.setStyleSheet("font-weight: bold; margin-right: 10px;")
         self.layout.addWidget(self.active_profile_label)
 
+        # Global Balance Label
+        self.balance_label = QLabel("💳 $0")
+        self.balance_label.setObjectName("BalanceLabel")
+        self.balance_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.balance_label.setStyleSheet("""
+            QLabel#BalanceLabel {
+                font-weight: 900;
+                font-size: 16px;
+                color: #f1c40f;
+                background-color: rgba(241, 196, 15, 0.1);
+                border: 1px solid rgba(241, 196, 15, 0.3);
+                border-radius: 8px;
+                padding: 5px 15px;
+                margin-right: 10px;
+                font-family: 'Segoe UI', sans-serif;
+            }
+        """)
+        self.layout.addWidget(self.balance_label)
+
         # Profile Button
         self.profile_btn = QPushButton("⋮  Профили")
         self.profile_btn.setObjectName("TitleBarButton") # Set ObjectName
@@ -119,13 +138,7 @@ class CustomTitleBar(QWidget):
     def mouseMoveEvent(self, event):
         if self.isDragging and event.buttons() & Qt.MouseButton.LeftButton:
             new_pos = event.globalPosition().toPoint() - self.dragPosition
-            
-            # Ensure window stays within screen boundaries (optional, but requested)
-            screen = QApplication.primaryScreen().availableGeometry()
-            x = max(screen.left(), min(new_pos.x(), screen.right() - self.parent.width()))
-            y = max(screen.top(), min(new_pos.y(), screen.bottom() - self.parent.height()))
-            
-            self.parent.move(x, y)
+            self.parent.move(new_pos)
             event.accept()
 
     def mouseReleaseEvent(self, event):

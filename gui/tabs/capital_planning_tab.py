@@ -265,7 +265,7 @@ class CapitalPlanningTab(QWidget):
         
         # Set current value
         current_val = self.data_manager.get_total_capital_balance()["liquid_cash"]
-        self.balance_editor.setText(f"{current_val:.2f}")
+        self.balance_editor.setText(f"{int(current_val)}")
         
         # Position and size - Ensure it's wide enough
         geo = self.lbl_current.geometry()
@@ -693,7 +693,7 @@ class CapitalPlanningTab(QWidget):
             self.log_table.setItem(i, 1, QTableWidgetItem(t["category"]))
             self.log_table.setItem(i, 2, QTableWidgetItem(t["desc"]))
             
-            amt_item = QTableWidgetItem(f"${t['amount']:,.2f}")
+            amt_item = QTableWidgetItem(f"${int(t['amount']):,}")
             if t["amount"] < 0:
                 amt_item.setForeground(QColor("#e74c3c"))
             else:
@@ -766,19 +766,23 @@ class CapitalPlanningTab(QWidget):
         
         balances = self.data_manager.get_total_capital_balance()
         current_capital = balances["liquid_cash"]
-        self.lbl_current.setText(f"Текущий баланс: ${int(current_capital)}")
+        self.lbl_current.setText(f"Текущий капитал: ${int(current_capital):,}")
+        
+        # Update Main Window Balance Label
+        if hasattr(self.main_window, 'update_balance_display'):
+            self.main_window.update_balance_display()
         
         # Add Net Worth info
         net_worth = balances["net_worth"]
         # If there's inventory, show it
         if net_worth > current_capital:
-            self.lbl_current.setToolTip(f"Общий капитал (вкл. товары): ${int(net_worth)}")
+            self.lbl_current.setToolTip(f"Общий капитал (вкл. товары): ${int(net_worth):,}")
         
         if target > 0:
             remaining = max(0, target - current_capital)
             progress = min(100, (current_capital / target) * 100) if target else 0
             
-            self.lbl_remaining.setText(f"Осталось: ${int(remaining)}")
+            self.lbl_remaining.setText(f"Осталось: ${int(remaining):,}")
             self.progress_bar.setValue(int(progress))
             
             # Prediction logic
@@ -845,9 +849,13 @@ class CapitalPlanningTab(QWidget):
         if target > 0:
             progress = min(100, int((current_cash / target) * 100))
             
-        self.lbl_remaining.setText(f"Осталось: ${int(remaining)}")
+        self.lbl_remaining.setText(f"Осталось: ${int(remaining):,}")
         self.progress_bar.setValue(progress)
-        self.lbl_current.setText(f"Текущий баланс: ${int(current_cash)}")
+        self.lbl_current.setText(f"Текущий баланс: ${int(current_cash):,}")
+        
+        # Update Main Window Balance if applicable
+        if hasattr(self.main_window, 'update_balance_display'):
+            self.main_window.update_balance_display()
         
         if remaining <= 0 and target > 0:
             self.lbl_prediction.setText("🎉 Цель достигнута! Отличная работа.")
@@ -873,17 +881,18 @@ class CapitalPlanningTab(QWidget):
         if not filename: return
         
         try:
+            # Try formatting
+            target_val = float(self.goal_input.text() or 0)
+            current_val = self.calculate_net_worth()
+            prog_val = (current_val / target_val * 100) if target_val > 0 else 0
+            
             with open(filename, "w", encoding="utf-8") as f:
                 f.write(f"=== ОТЧЕТ PO КАПИТАЛУ ({datetime.now().strftime('%d.%m.%Y')}) ===\n\n")
                 
-                # Goal
-                target = float(self.goal_input.text() or 0)
-                current = self.calculate_net_worth()
-                f.write(f"Цель: ${target:,.2f}\n")
-                f.write(f"Текущий капитал: ${current:,.2f}\n")
-                if target > 0:
-                    prog = (current / target) * 100
-                    f.write(f"Прогресс: {prog:.1f}%\n")
+                f.write(f"Цель: ${int(target_val):,}\n")
+                f.write(f"Текущий капитал: ${int(current_val):,}\n")
+                if target_val > 0:
+                    f.write(f"Прогресс: {prog_val:.1f}%\n")
                 f.write("\n")
                 
                 # Stats
@@ -1211,7 +1220,7 @@ class CapitalPlanningTab(QWidget):
             final_amount = invest * (1 + roi) ** cycles
             profit = final_amount - invest
             
-            self.lbl_sim_result.setText(f"Итог: ${final_amount:,.2f} (+ ${profit:,.2f})")
+            self.lbl_sim_result.setText(f"Итог: ${int(final_amount):,} (+ ${int(profit):,})")
         except:
             self.lbl_sim_result.setText("Ошибка данных")
 

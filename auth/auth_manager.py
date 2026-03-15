@@ -38,22 +38,30 @@ class AuthManager:
 
     def validate_key(self, login, password, key):
         """Validates key with Firebase."""
-        logger.info(f"Validating key: {key[:5]}... for user: {login}")
+        logger.info(f"Auth: Starting validation for user '{login}' with key '{key[:5]}...'")
         try:
             # 1. Fetch Key Document
             doc_url = f"{self.base_url}/keys/{key}?key={self.api_key}"
-            logger.debug(f"Fetching: {doc_url}")
+            logger.info(f"Auth: Sending request to Firestore: {doc_url}")
             response = requests.get(doc_url, timeout=10)
-            
+            logger.info(f"Auth: Received response with status code {response.status_code}")
+
             if response.status_code == 404:
-                logger.warning("Key not found (404)")
-                return False, "Неверный ключ лицензии", None
+                logger.warning("Auth: Key not found in Firestore (404).")
+                return False, "Неверный ключ лицензии. Проверьте правильность ввода.", None
             
+            # Handle other client/server errors before grace period
             if response.status_code != 200:
-                logger.warning(f"Server error {response.status_code}: {response.text}")
-                return self.check_grace_period(login, password, key)
-                
+                logger.error(f"Auth: Firestore server returned an error. Status: {response.status_code}, Body: {response.text}")
+                # Try to parse a more specific error message from Firebase
+                try:
+                    error_msg = response.json().get("error", {}).get("message", "Неизвестная ошибка сервера")
+                except:
+                    error_msg = response.text
+                return False, f"Ошибка сервера: {error_msg}", None
+
             data = response.json()
+            logger.debug(f"Auth: Successfully parsed response JSON: {data}")
             fields = data.get("fields", {})
             
             # Helper to get field value safely
@@ -61,10 +69,10 @@ class AuthManager:
                 return fields.get(name, {}).get(type_str)
 
             # Check if active
-            is_active = fields.get("is_active", {}).get("booleanValue", True) # Default true if missing
+            is_active = fields.get("is_active", {}).get("booleanValue", True)
             if not is_active:
-                 logger.warning("Key is disabled")
-                 return False, "Этот ключ заблокирован", None
+                 logger.warning(f"Auth: Key '{key[:5]}...' is marked as inactive.")
+                 return False, "Этот ключ был деактивирован администратором.", None
 
             # Check Activation
             stored_hwid = get_field("hwid")
@@ -72,43 +80,47 @@ class AuthManager:
             stored_password = get_field("password")
             
             if stored_hwid:
+                logger.info("Auth: Key is already activated. Verifying credentials.")
                 # Already activated
                 if stored_hwid != self.hwid:
-                    logger.warning(f"HWID mismatch: stored={stored_hwid}, current={self.hwid}")
-                    return False, "Ключ уже активирован на другом ПК", None
-                # TODO: SECURITY RISK - Passwords are compared client-side! This implies plaintext storage in DB.
-                # Refactor to use server-side validation (e.g., Firebase Auth or salted hashes).
+                    logger.warning(f"Auth: HWID mismatch. Stored: '{stored_hwid}', Current: '{self.hwid}'")
+                    return False, "Ключ уже активирован на другом компьютере.", None
+                
                 if stored_login and (stored_login != login or stored_password != password):
-                    logger.warning("Login/Password mismatch")
-                    return False, "Неверный логин или пароль для этого ключа", None
+                    logger.warning("Auth: Login/Password mismatch for activated key.")
+                    return False, "Неверный логин или пароль для этого ключа.", None
                 
                 # Check Expiration
                 expires_at_str = get_field("expires_at")
+                logger.info(f"Auth: Validating expiration. Stored value: '{expires_at_str}'")
                 if expires_at_str and expires_at_str != "Lifetime":
                     try:
-                        expires_at = datetime.fromisoformat(expires_at_str)
+                        # Use timezone-unaware comparison
+                        expires_at = datetime.fromisoformat(expires_at_str.split('Z')[0])
                         if datetime.now() > expires_at:
-                             logger.warning("License expired")
-                             return False, "Срок действия лицензии истек", None
-                    except ValueError:
-                        pass # Ignore parsing errors
+                             logger.warning("Auth: License has expired.")
+                             return False, f"Срок действия лицензии истек {expires_at.strftime('%d.%m.%Y')}.", None
+                    except ValueError as e:
+                        logger.error(f"Auth: Could not parse expiration date '{expires_at_str}'. Error: {e}")
+                        pass # Ignore parsing errors, treat as valid if unparseable
                 
                 expires_display = expires_at_str if expires_at_str else "Lifetime"
 
             else:
                 # First Activation
-                logger.info("Activating new key...")
-                duration_days = fields.get("duration_days", {}).get("integerValue")
-                if not duration_days: 
-                     # Try string value just in case
-                     try:
-                         duration_days = int(fields.get("duration_days", {}).get("stringValue", "7"))
-                     except:
-                         duration_days = 7
+                logger.info(f"Auth: This is the first activation for key '{key[:5]}...'.")
+                duration_days_str = fields.get("duration_days", {}).get("integerValue") or fields.get("duration_days", {}).get("stringValue", "7")
+                try:
+                    duration_days = int(duration_days_str)
+                except (ValueError, TypeError):
+                    logger.warning(f"Auth: Invalid duration_days format ('{duration_days_str}'). Defaulting to 7.")
+                    duration_days = 7
 
                 now = datetime.now()
-                expires_at = now + timedelta(days=int(duration_days))
-                expires_at_str = expires_at.isoformat()
+                expires_at = now + timedelta(days=duration_days)
+                expires_at_str = expires_at.isoformat() + "Z" # Use ISO 8601 format with Z
+                
+                logger.info(f"Auth: Activating key for {duration_days} days. Expires at: {expires_at_str}")
                 
                 # Update Document (Activate)
                 update_mask = "updateMask.fieldPaths=hwid&updateMask.fieldPaths=login&updateMask.fieldPaths=password&updateMask.fieldPaths=activated_at&updateMask.fieldPaths=expires_at"
@@ -119,20 +131,23 @@ class AuthManager:
                         "hwid": {"stringValue": self.hwid},
                         "login": {"stringValue": login},
                         "password": {"stringValue": password},
-                        "activated_at": {"stringValue": now.isoformat()},
+                        "activated_at": {"stringValue": now.isoformat() + "Z"},
                         "expires_at": {"stringValue": expires_at_str}
                     }
                 }
                 
+                logger.info("Auth: Sending PATCH request to activate key.")
                 patch_resp = requests.patch(patch_url, json=patch_data, timeout=10)
+                
                 if patch_resp.status_code != 200:
-                    logger.error(f"Activation failed: {patch_resp.text}")
-                    return False, f"Ошибка активации: {patch_resp.text}", None
+                    logger.error(f"Auth: Activation failed! Status: {patch_resp.status_code}, Body: {patch_resp.text}")
+                    return False, f"Ошибка активации ключа: {patch_resp.text}", None
                     
+                logger.info("Auth: Activation PATCH request successful.")
                 expires_display = expires_at_str
 
             # Success
-            logger.info("Auth successful")
+            logger.info("Auth: Validation successful.")
             self.save_session(login, password, key)
             self.current_creds = {
                 "login": login, 
@@ -142,12 +157,12 @@ class AuthManager:
             }
             return True, "Успешная авторизация", expires_display
                 
-        except requests.exceptions.ConnectionError:
-             logger.warning("Connection error, checking grace period")
+        except requests.exceptions.RequestException as e:
+             logger.warning(f"Auth: Network request failed: {e}. Checking grace period.")
              return self.check_grace_period(login, password, key)
         except Exception as e:
-            logger.error(f"Validation error: {e}", exc_info=True)
-            return False, f"Ошибка: {str(e)}", None
+            logger.error(f"Auth: An unexpected error occurred during validation: {e}", exc_info=True)
+            return False, f"Критическая ошибка: {str(e)}", None
 
     def check_license_status(self):
         """Re-validates the current license."""

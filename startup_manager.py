@@ -33,16 +33,33 @@ class StartupManager:
         # Пытаемся подключиться к сегменту памяти. 
         # Если удалось - значит приложение уже запущено.
         if self.shared_memory.attach():
+            # На всякий случай проверяем, не пустой ли это сегмент
+            # (но в Qt если attach вернул True, значит сегмент есть)
             return False
             
-        # Если не удалось - создаем сегмент.
+        # Если не удалось прикрепиться - пробуем создать.
         if not self.shared_memory.create(1):
-            logger.error(f"Unable to create single instance lock: {self.shared_memory.errorString()}")
-            # Если не удалось создать, возможно остался "зомби" сегмент от краша.
-            # Но для безопасности лучше вернуть True и разрешить запуск, или False?
-            # Обычно это False, но иногда shared memory глючит.
-            # Попробуем еще раз для надежности? Нет, вернем False.
-            return False
+            # Если не удалось создать, это может быть из-за того, что сегмент уже существует
+            # (ошибка AlreadyExists), но attach выше не сработал.
+            # Это типичный "зомби" сегмент от краша.
+            error = self.shared_memory.error()
+            
+            # В PyQt6 ошибки могут быть в QSharedMemory.SharedMemoryError
+            # Пробуем проверить на AlreadyExists
+            if error == QSharedMemory.SharedMemoryError.AlreadyExists:
+                # Пробуем прикрепиться еще раз, вдруг состояние изменилось
+                if self.shared_memory.attach():
+                    return False
+                
+                # Если все еще не можем прикрепиться, но create говорит, что сегмент есть - 
+                # это зомби-сегмент. Разрешаем запуск, т.к. реального процесса нет.
+                logger.warning("Found zombie shared memory segment. Bypassing lock.")
+                return True
+                
+            logger.error(f"Unable to create single instance lock: {self.shared_memory.errorString()} (Error code: {error})")
+            # Если это какая-то другая ошибка (например, доступ запрещен), 
+            # всё равно лучше разрешить запуск, чем блокировать пользователя навсегда.
+            return True
             
         return True
 

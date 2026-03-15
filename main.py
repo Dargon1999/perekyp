@@ -77,23 +77,14 @@ def main():
     app.setApplicationName(APP_NAME)
     app.setOrganizationName("Dargon")
     
-    # Force taskbar icon refresh
-    icon_resource = resource_path("icon.ico")
-    logging.info(f"Attempting to load icon from resource_path: {icon_resource}")
-    if os.path.exists(icon_resource):
-        app.setWindowIcon(QIcon(icon_resource))
-    else:
-        logging.warning(f"Icon not found at resource_path: {icon_resource}")
-
     # --- STARTUP CHECKS ---
     startup_mgr = StartupManager(APP_ID)
     
     # 1. Single Instance Check
     if not startup_mgr.check_single_instance():
         logging.warning("Another instance is already running. Exiting.")
-        # Можно добавить активацию существующего окна, но пока просто выход
-        # Используем QSystemTrayIcon или просто MessageBox, если хотим уведомить
-        # Но лучше просто тихо выйти или развернуть существующее (сложно без IPC)
+        # Показываем уведомление пользователю
+        startup_mgr._show_error("Ошибка запуска", "Приложение уже запущено.\nПожалуйста, закройте другие копии программы.")
         sys.exit(0)
 
     # 2. Permissions Check
@@ -167,20 +158,16 @@ def main():
     app.setFont(font)
 
     # -------------------------------
-    # PRELOAD DATA MANAGER
+    # DATA MANAGER
     # -------------------------------
-    data_manager_container = {}
-
-    def load_data():
-        try:
-            data_manager_container['instance'] = DataManager()
-            logging.info("DataManager loaded")
-        except Exception as e:
-            logging.error(f"DataManager preload error: {e}")
-            data_manager_container['instance'] = None
-
-    loader_thread = threading.Thread(target=load_data, daemon=True)
-    loader_thread.start()
+    # Initialize DataManager in the main thread (QObject restriction)
+    # The actual data loading is fast enough for typical JSON files.
+    try:
+        data_manager = DataManager()
+        logging.info("DataManager initialized")
+    except Exception as e:
+        logging.error(f"DataManager initialization error: {e}")
+        data_manager = None
 
     # -------------------------------
     # AUTH WINDOW
@@ -189,9 +176,6 @@ def main():
     auth_window.setWindowIcon(app_icon)
 
     if auth_window.exec() == LoginWindow.DialogCode.Accepted:
-        loader_thread.join()
-        data_manager = data_manager_container.get('instance')
-
         # MAIN WINDOW
         window = MainWindow(
             auth_manager=auth_window.auth_manager,

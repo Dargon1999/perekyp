@@ -493,8 +493,17 @@ class GenericTab(QWidget):
         # Update Balance Stats
         # self.stat_start.value_label.setText(f"${stats.get('starting_amount', 0):,.0f}") # Removed
         balances = self.data_manager.get_total_capital_balance()
-        # Use 2 decimals for balance display as per requirements
-        self.stat_balance.value_label.setText(f"${balances['liquid_cash']:,.2f}")
+        
+        # Check if we are in car_rental or mining category to format without .00 if integer
+        if self.category in ["car_rental", "mining"]:
+            val = balances['liquid_cash']
+            if val == int(val):
+                self.stat_balance.value_label.setText(f"${int(val):,}".replace(",", " "))
+            else:
+                self.stat_balance.value_label.setText(f"${val:,.2f}".replace(",", " "))
+        else:
+            # Use 2 decimals for balance display as per requirements for other categories
+            self.stat_balance.value_label.setText(f"${balances['liquid_cash']:,.2f}")
 
         # Filter Logic
         filter_mode = self.filter_combo.currentText()

@@ -107,8 +107,9 @@ class ModernTabButton(QPushButton):
         font = self.font()
         font.setBold(self.isChecked())
         size = 11 if self.isChecked() else 10
-        if size > 0:
-            font.setPointSize(size)
+        # The font size is guaranteed to be positive (10 or 11).
+        # A check 'if size > 0:' would be redundant but harmless.
+        font.setPointSize(size)
         painter.setFont(font)
         
         if self.isChecked():

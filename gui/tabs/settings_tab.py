@@ -573,6 +573,37 @@ class SettingsTab(QWidget):
         layout.addWidget(price_group)
         
         # Timer Settings
+        layout.addWidget(QLabel("Стартовая вкладка:"))
+        self.startup_tab_combo = QComboBox()
+        
+        # Mapping for startup tabs
+        self.tab_options = [
+            ("car_rental", "Аренда авто"),
+            ("clothes", "Покупка / Продажа"),
+            ("mining", "Добыча"),
+            ("farm_bp", "Фарм BP"),
+            ("memo", "Блокнот"),
+            ("helper", "Помощник"),
+            ("cooking", "Кулинария"),
+            ("analytics", "Аналитика"),
+            ("capital_planning", "Капитал"),
+            ("timers", "Таймер"),
+            ("fishing", "Рыбалка"),
+            ("settings", "Настройки")
+        ]
+        
+        for _, opt_text in self.tab_options:
+            self.startup_tab_combo.addItem(opt_text)
+            
+        current_startup = self.data_manager.get_setting("startup_tab", "car_rental")
+        for i, (opt_key, _) in enumerate(self.tab_options):
+            if opt_key == current_startup:
+                self.startup_tab_combo.setCurrentIndex(i)
+                break
+                
+        self.startup_tab_combo.currentIndexChanged.connect(self.on_startup_tab_changed)
+        layout.addWidget(self.startup_tab_combo)
+        
         layout.addWidget(QLabel("Настройки таймера:"))
         layout.addWidget(QLabel("Режим уведомлений о закрытии контрактов:"))
         
@@ -697,6 +728,12 @@ class SettingsTab(QWidget):
         if hasattr(self, 'cost_container'):
             self.cost_container.setVisible(checked)
         
+    def on_startup_tab_changed(self, index):
+        if 0 <= index < len(self.tab_options):
+            mode_key = self.tab_options[index][0]
+            self.data_manager.set_setting("startup_tab", mode_key)
+            self.data_manager.save_data()
+
     def on_notif_combo_changed(self, index):
         if 0 <= index < len(self.notif_modes):
             mode_key = self.notif_modes[index][0]

@@ -1,13 +1,22 @@
 import time
 import logging
-import mss
-import keyboard
 import threading
-import cv2
-import numpy as np
 import requests
 import os
 from PyQt6.QtCore import QObject, pyqtSignal
+
+# Lazy imports to prevent startup failure if dependencies are missing
+try:
+    import mss
+    import cv2
+    import numpy as np
+    import pydirectinput
+    import keyboard
+    import mouse
+    HAS_BOT_DEPS = True
+except ImportError as e:
+    logging.error(f"Missing automation dependencies: {e}. Some bots will be disabled.")
+    HAS_BOT_DEPS = False
 
 # Ensure temp dir exists for downloads
 TEMP_DIR = os.path.join(os.getenv("TEMP"), "MoneyTracker_Bots")
@@ -27,6 +36,10 @@ class BotBase(QObject):
         self._stop_event = threading.Event()
 
     def start(self):
+        if not HAS_BOT_DEPS:
+            self.log_message.emit(f"Ошибка: Не установлены библиотеки для {self.name} (mss, cv2 и др.)")
+            return
+            
         if self.running:
             return
         self.running = True
@@ -350,6 +363,7 @@ class GymBot(BotBase):
                             time.sleep(0.1)
                         if self._stop_event.is_set():
                             continue
+                        import keyboard
                         keyboard.send("sc12")
                         continue
 
@@ -684,6 +698,7 @@ class BeeperBot(BotBase):
                 time.sleep(0.1)
             
             self.log_message.emit("Зажим E (3 сек)")
+            import keyboard
             keyboard.press('e')
             
             # Wait 3 sec

@@ -297,19 +297,22 @@ class BotControlDialog(QDialog):
         self.timer.start(50)
         
     def check_hotkeys(self):
-        import keyboard
-        f5_now = keyboard.is_pressed("f5")
-        f9_now = keyboard.is_pressed("f9")
+        try:
+            import keyboard
+            f5_now = keyboard.is_pressed("f5")
+            f9_now = keyboard.is_pressed("f9")
 
-        if f5_now and not self._hotkey_prev["f5"]:
-            self.bot.toggle()
+            if f5_now and not self._hotkey_prev["f5"]:
+                self.bot.toggle()
 
-        if f9_now and not self._hotkey_prev["f9"]:
-            self.bot.stop()
-            self.close()
+            if f9_now and not self._hotkey_prev["f9"]:
+                self.bot.stop()
+                self.close()
 
-        self._hotkey_prev["f5"] = f5_now
-        self._hotkey_prev["f9"] = f9_now
+            self._hotkey_prev["f5"] = f5_now
+            self._hotkey_prev["f9"] = f9_now
+        except Exception:
+            pass
 
     def update_status(self, is_running, text):
         self.status_lbl.setText(f"Статус: {text}")
@@ -480,12 +483,15 @@ class CodeAuthWidget(QWidget):
         if not self.user_dashboard.isVisible():
             self._hotkey_prev["f8"] = False
             return
-        import keyboard
-        now = keyboard.is_pressed("f8")
-        if now and not self._hotkey_prev["f8"]:
-            self.tabs.set_current_index(1)
-            self.clean_logs_widget.start_cleaning()
-        self._hotkey_prev["f8"] = now
+        try:
+            import keyboard
+            now = keyboard.is_pressed("f8")
+            if now and not self._hotkey_prev["f8"]:
+                self.tabs.set_current_index(1)
+                self.clean_logs_widget.start_cleaning()
+            self._hotkey_prev["f8"] = now
+        except Exception:
+            pass
 
     def open_bot(self, bot_instance, title, info):
         dlg = BotControlDialog(bot_instance, title, info, self)

@@ -215,6 +215,46 @@ def list_keys():
         status = "АКТИВЕН" if is_active else "БАН"
         print(f"{key_val:<25} | {status:<8} | {time_info:<20} | {hwid:<30} | {login}")
 
+def reset_key():
+    print("\n--- СБРОС КЛЮЧА (ОБНУЛЕНИЕ HWID И ДАТЫ АКТИВАЦИИ) ---")
+    key = input("Введите ключ для сброса: ").strip()
+    if not key: return
+    
+    # Get current data
+    get_url = f"{BASE_URL}/keys/{key}?key={API_KEY}"
+    resp = requests.get(get_url)
+    if resp.status_code != 200:
+        print(f"Ключ {key} не найден.")
+        return
+        
+    fields = resp.json().get("fields", {})
+    
+    print(f"Текущие данные ключа {key}:")
+    print(f"  HWID: {fields.get('hwid', {}).get('stringValue', '-')}")
+    print(f"  Login: {fields.get('login', {}).get('stringValue', '-')}")
+    print(f"  Expires: {fields.get('expires_at', {}).get('stringValue', 'Not activated')}")
+    
+    confirm = input("\nВы точно хотите сбросить этот ключ? Он станет доступен для новой активации (y/n): ")
+    if confirm.lower() != 'y': return
+
+    # Update HWID, login, expires_at to reset state
+    url = f"{BASE_URL}/keys/{key}?key={API_KEY}&updateMask.fieldPaths=hwid&updateMask.fieldPaths=login&updateMask.fieldPaths=expires_at&updateMask.fieldPaths=is_active"
+    
+    data = {
+        "fields": {
+            "hwid": {"nullValue": None},
+            "login": {"nullValue": None},
+            "expires_at": {"nullValue": None},
+            "is_active": {"booleanValue": True} # Ensure it's unbanned
+        }
+    }
+    
+    resp = requests.patch(url, json=data)
+    if resp.status_code == 200:
+        print(f"Ключ {key} успешно сброшен. Теперь его можно активировать заново.")
+    else:
+        print(f"Ошибка сброса: {resp.text}")
+
 if __name__ == "__main__":
     while True:
         print("\n--- FIREBASE ADMIN ---")
@@ -223,7 +263,8 @@ if __name__ == "__main__":
         print("3. Банить ключ")
         print("4. Продлевать ключ")
         print("5. Удалить ключ")
-        print("6. Выход")
+        print("6. Сбросить ключ (HWID/Дата)")
+        print("7. Выход")
         
         c = input("> ")
         if c == '1': generate_key()
@@ -231,4 +272,5 @@ if __name__ == "__main__":
         elif c == '3': ban_key()
         elif c == '4': extend_key()
         elif c == '5': delete_key()
-        elif c == '6': break
+        elif c == '6': reset_key()
+        elif c == '7': break

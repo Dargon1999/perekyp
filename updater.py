@@ -5,23 +5,83 @@ import subprocess
 import logging
 import shutil
 import tempfile
+import hashlib
+
+def verify_integrity(file_path):
+    """Basic integrity check: file exists, size is reasonable, and can be read."""
+    try:
+        if not os.path.exists(file_path):
+            return False, "Файл не найден"
+        
+        size = os.path.getsize(file_path)
+        if size < 1000000: # 1MB minimum for MoneyTracker.exe
+            return False, f"Файл слишком мал ({size} байт)"
+            
+        # Try to read a chunk to ensure it's not locked/unreadable
+        with open(file_path, 'rb') as f:
+            f.read(1024)
+            
+        return True, "OK"
+    except Exception as e:
+        return False, str(e)
 
 def update_and_restart(target_exe, update_file, pid_to_wait):
     target_exe = os.path.abspath(target_exe)
     update_file = os.path.abspath(update_file)
     
-    # Setup logging
-    temp_dir = tempfile.gettempdir()
-    log_file = os.path.join(temp_dir, 'MoneyTracker_updater.log')
-    logging.basicConfig(filename=log_file, level=logging.INFO, format='%(asctime)s - %(message)s')
-    logging.info(f"Updater started. Target: {target_exe}, Update: {update_file}, PID: {pid_to_wait}")
+    # Setup logging in a persistent location
+    app_data = os.getenv('LOCALAPPDATA') or os.path.expanduser('~')
+    log_dir = os.path.join(app_data, "MoneyTracker", "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, 'updater.log')
+    
+    # Configure logging to both file and console
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    
+    fh = logging.FileHandler(log_file, encoding='utf-8')
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
+    
+    sh = logging.StreamHandler(sys.stdout)
+    sh.setFormatter(formatter)
+    logger.addHandler(sh)
+
+    logging.info(f"--- Updater Started ---")
+    logging.info(f"Target: {target_exe}")
+    logging.info(f"Update: {update_file}")
+    logging.info(f"PID to wait: {pid_to_wait}")
     
     def show_error(msg):
+        logging.error(f"Error shown to user: {msg}")
         try:
             import ctypes
             ctypes.windll.user32.MessageBoxW(0, str(msg), "Ошибка обновления", 0x10)
         except:
             pass
+
+    # Protection against infinite restart loop
+    restart_count_file = os.path.join(log_dir, "restart_count.tmp")
+    try:
+        count = 0
+        if os.path.exists(restart_count_file):
+            with open(restart_count_file, "r") as f:
+                content = f.read().strip()
+                if content:
+                    count = int(content)
+        
+        if count > 3:
+            logging.critical("Infinite restart loop detected! Aborting auto-restart.")
+            show_error("Обнаружена циклическая ошибка запуска. Обновление приостановлено. Пожалуйста, запустите программу вручную.")
+            if os.path.exists(restart_count_file):
+                os.remove(restart_count_file)
+            return
+            
+        with open(restart_count_file, "w") as f:
+            f.write(str(count + 1))
+    except Exception as e:
+        logging.warning(f"Could not check restart count: {e}")
 
     # Wait for the main application to close
     if pid_to_wait:
@@ -33,163 +93,103 @@ def update_and_restart(target_exe, update_file, pid_to_wait):
             
             while time.time() - start_time < max_wait:
                 try:
-                    # Check if process exists. On Windows, this is a bit rough but works.
                     import ctypes
                     SYNCHRONIZE = 0x00100000
                     process = ctypes.windll.kernel32.OpenProcess(SYNCHRONIZE, False, pid)
                     if process:
-                        ctypes.windll.kernel32.WaitForSingleObject(process, 1000)
+                        res = ctypes.windll.kernel32.WaitForSingleObject(process, 1000)
                         ctypes.windll.kernel32.CloseHandle(process)
-                        # If we are here, wait returned or timed out. 
-                        # Let's simple check if we can rename the target file, that's the ultimate test.
-                        if not os.path.exists(target_exe):
+                        if res == 0: # WAIT_OBJECT_0
                             break
-                        try:
-                            os.rename(target_exe, target_exe + ".bak")
-                            os.rename(target_exe + ".bak", target_exe)
-                            # If we succeeded, the file is not locked!
-                            break 
-                        except OSError:
-                            logging.info("File still locked...")
-                            time.sleep(1)
-                            continue
                     else:
                         break
-                except Exception as e:
-                    logging.error(f"Error checking process: {e}")
-                    time.sleep(1)
+                except:
+                    break
+                time.sleep(0.5)
             
-            logging.info("Process exited or file unlocked.")
+            logging.info("Main process appears to have exited.")
         except Exception as e:
             logging.error(f"Error waiting for process: {e}")
-            show_error(f"Ошибка при ожидании закрытия программы: {e}")
-            return
 
-    # Verify environment
-    try:
-        # Check disk space in temp (need at least 200MB for safety)
-        if hasattr(os, 'statvfs'): # Linux/Unix
-            st = os.statvfs(temp_dir)
-            free = st.f_bavail * st.f_frsize
-        else: # Windows
-            import ctypes
-            free_bytes = ctypes.c_ulonglong(0)
-            total_bytes = ctypes.c_ulonglong(0)
-            total_free_bytes = ctypes.c_ulonglong(0)
-            ctypes.windll.kernel32.GetDiskFreeSpaceExW(ctypes.c_wchar_p(temp_dir), 
-                ctypes.byref(free_bytes), ctypes.byref(total_bytes), ctypes.byref(total_free_bytes))
-            free = free_bytes.value
-        
-        logging.info(f"Free space in temp: {free / (1024*1024):.2f} MB")
-        if free < 200 * 1024 * 1024:
-            logging.warning("Low disk space in temp directory.")
-    except Exception as e:
-        logging.warning(f"Could not check disk space: {e}")
+    # Verify update file before moving
+    ok, err = verify_integrity(update_file)
+    if not ok:
+        logging.error(f"Update file integrity check failed: {err}")
+        show_error(f"Файл обновления поврежден: {err}")
+        return
 
     # Replace file
     success = False
+    backup_file = target_exe + ".bak"
+    
     try:
-        # Verify update file integrity (basic check)
-        if not os.path.exists(update_file) or os.path.getsize(update_file) == 0:
-            logging.error("Update file is missing or empty.")
-            show_error("Файл обновления поврежден или отсутствует.")
-            return
-
-        # Retry loop for replacement
-        for i in range(5):
+        # Retry loop for replacement (sometimes files stay locked a bit longer)
+        for i in range(10):
             try:
-                # 1. Backup existing file
-                backup_file = target_exe + ".bak"
-                # If backup exists, try to remove it first to avoid permission issues
-                if os.path.exists(backup_file):
-                    try:
-                        os.remove(backup_file)
-                    except OSError:
-                        pass
-
-                if os.path.exists(target_exe):
-                    try:
-                        os.rename(target_exe, backup_file)
-                    except OSError as e:
-                        logging.warning(f"Could not rename target to backup: {e}")
-                        # If we can't rename, we likely can't overwrite.
-                        time.sleep(1)
-                        continue
+                logging.info(f"Attempt {i+1} to replace file...")
                 
-                try:
-                    # 2. Move new file to target
-                    # Use shutil.move for cross-filesystem support
-                    shutil.move(update_file, target_exe)
-                    
-                    # 3. Verify the move
-                    if os.path.exists(target_exe) and os.path.getsize(target_exe) > 0:
-                        logging.info("File replaced successfully.")
-                        success = True
-                        break
-                    else:
-                        raise Exception("Move appeared successful but target file is missing or empty.")
+                # 1. Remove old backup
+                if os.path.exists(backup_file):
+                    try: os.remove(backup_file)
+                    except: pass
 
-                except Exception as e:
-                    logging.error(f"Failed to move new file to target: {e}")
-                    # ROLLBACK: Try to restore backup
-                    if os.path.exists(backup_file):
-                        try:
-                            logging.info("Attempting rollback...")
-                            # Ensure target is clean before restoring
-                            if os.path.exists(target_exe):
-                                try:
-                                    os.remove(target_exe)
-                                except OSError as rem_e:
-                                    logging.error(f"Failed to remove partial target during rollback: {rem_e}")
-                            
-                            # Restore backup
-                            os.rename(backup_file, target_exe)
-                            logging.info("Rollback successful.")
-                        except Exception as rollback_e:
-                            logging.critical(f"Rollback failed: {rollback_e}")
-                            show_error(f"Критическая ошибка! Не удалось восстановить резервную копию: {rollback_e}")
-                    raise e 
+                # 2. Rename current to backup
+                if os.path.exists(target_exe):
+                    os.rename(target_exe, backup_file)
+                
+                # 3. Move update to target
+                shutil.move(update_file, target_exe)
+                
+                # 4. Final verify
+                ok, err = verify_integrity(target_exe)
+                if ok:
+                    logging.info("Update applied successfully.")
+                    success = True
+                    break
+                else:
+                    raise Exception(f"Integrity check failed after move: {err}")
+
             except Exception as e:
                 logging.warning(f"Attempt {i+1} failed: {e}")
+                # Rollback if possible
+                if os.path.exists(backup_file) and not os.path.exists(target_exe):
+                    try: os.rename(backup_file, target_exe)
+                    except: pass
                 time.sleep(1)
                 
     except Exception as e:
-        logging.error(f"Failed to replace file: {e}")
-        show_error(f"Не удалось заменить файл программы: {e}")
-    
-    # Cleanup update file if it still exists (failure case)
-    if os.path.exists(update_file):
+        logging.error(f"Critical error during file replacement: {e}")
+        show_error(f"Не удалось обновить файл: {e}")
+
+    if success:
+        # Cleanup
+        if os.path.exists(backup_file):
+            try: os.remove(backup_file)
+            except: pass
+            
+        # Restart
         try:
-            os.remove(update_file)
-            logging.info("Cleaned up leftover update file.")
+            logging.info(f"Restarting application: {target_exe}")
+            if os.name == 'nt':
+                # Use ShellExecute to ensure it runs as a normal process
+                import ctypes
+                ctypes.windll.shell32.ShellExecuteW(None, "open", target_exe, None, None, 1)
+            else:
+                subprocess.Popen([target_exe], start_new_session=True)
+            
+            logging.info("Restart command issued. Updater exiting.")
+            # Clear restart count on success (well, at least we tried to start)
+            # Actually, the app should clear it itself on successful start, 
+            # but we can reset it here as we are confident in the update.
+            if os.path.exists(restart_count_file):
+                os.remove(restart_count_file)
+                
         except Exception as e:
-            logging.error(f"Failed to cleanup update file: {e}")
-
-    if not success:
-        logging.error("Update failed. Exiting.")
-        show_error("Обновление не удалось. Попробуйте скачать новую версию вручную.")
-        return
-
-    # Final integrity check of the replaced file
-    if os.path.exists(target_exe):
-        size = os.getsize(target_exe)
-        if size < 1000000: # Typical minimal size for this EXE
-            logging.error(f"Integrity check failed: Replaced EXE size too small ({size} bytes)")
-            show_error("Критическая ошибка: Файл приложения поврежден после замены. Попробуйте переустановить программу.")
-            return
-        logging.info(f"Integrity check passed. Final size: {size} bytes")
-    
-    # Restart application
-    try:
-        logging.info(f"Restarting {target_exe}...")
-        # Use start to detach properly and ensure window shows up
-        if os.name == 'nt':
-             os.startfile(target_exe)
-        else:
-             subprocess.Popen([target_exe])
-    except Exception as e:
-        logging.error(f"Failed to restart: {e}")
-        show_error(f"Обновление успешно, но не удалось запустить программу: {e}")
+            logging.error(f"Failed to restart: {e}")
+            show_error(f"Обновление завершено, но не удалось запустить программу автоматически: {e}")
+    else:
+        logging.error("Update failed after all attempts.")
+        show_error("Не удалось применить обновление. Пожалуйста, скачайте новую версию вручную.")
 
 if __name__ == "__main__":
     # Ensure we have arguments

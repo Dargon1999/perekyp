@@ -3,11 +3,12 @@ import os
 import shutil
 
 def build():
-    # Remove previous build artifacts
+    # Remove previous build artifacts but keep dist if needed for updater
     if os.path.exists("build"):
         shutil.rmtree("build")
-    if os.path.exists("dist"):
-        shutil.rmtree("dist")
+    # We don't delete dist here because updater.exe might be there
+    # Instead, we just ensure it exists
+    os.makedirs("dist", exist_ok=True)
 
     # Define paths
     entry_point = "main.py"

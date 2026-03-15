@@ -247,6 +247,7 @@ class AnalyticsSubTab(QWidget):
             start_date, end_date = self.get_date_range()
             
             all_transactions = self._get_all_transactions()
+            self.logger.info(f"Analytics: Found {len(all_transactions)} total transactions for {self.category_key}")
             
             # Filter by date
             filtered_tx = []
@@ -256,23 +257,37 @@ class AnalyticsSubTab(QWidget):
                     if not date_str:
                         continue
                         
-                    # Handle formats
-                    fmt = t.get("raw_date_fmt", "%d.%m.%Y")
-                    # Fallback check
-                    if "-" in date_str: fmt = "%Y-%m-%d"
-                    elif "." in date_str: fmt = "%d.%m.%Y"
+                    # Some dates might have time, strip it
+                    date_only = date_str.split(" ")[0]
                     
-                    t_date = datetime.strptime(date_str, fmt)
-                    if start_date <= t_date <= end_date:
-                        # Normalize date for display
-                        t['display_date'] = t_date.strftime("%d.%m.%Y")
+                    # Try common formats for parsing
+                    t_date = None
+                    for fmt in ["%d.%m.%Y", "%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y"]:
+                        try:
+                            t_date = datetime.strptime(date_only, fmt).date()
+                            break
+                        except ValueError:
+                            continue
+                    
+                    if not t_date:
+                        self.logger.warning(f"Failed to parse date: {date_str}")
+                        continue
+
+                    # Store normalized date for display and comparison
+                    t['normalized_date'] = t_date
+                    t['date'] = t_date.strftime("%d.%m.%Y") # Standardize for chart/table
+
+                    # Compare dates (start_date and end_date are datetime objects from get_date_range)
+                    if start_date.date() <= t_date <= end_date.date():
                         filtered_tx.append(t)
                 except (ValueError, TypeError) as e:
-                    self.logger.warning(f"Error parsing date {t.get('date')}: {e}")
+                    self.logger.warning(f"Error processing transaction {t}: {e}")
                     continue
+            
+            self.logger.info(f"Analytics: Filtered to {len(filtered_tx)} transactions in range {start_date.date()} to {end_date.date()}")
         except Exception as e:
-            self.logger.error(f"Critical error in refresh_data: {e}")
-            self.show_no_data_message() # Or a more specific error message
+            self.logger.error(f"Critical error in refresh_data: {e}", exc_info=True)
+            self.show_no_data_message() 
             return
 
         # 2. Calculate Stats
@@ -294,15 +309,9 @@ class AnalyticsSubTab(QWidget):
         
         prev_tx = []
         for t in all_transactions:
-             try:
-                fmt = t.get("raw_date_fmt", "%d.%m.%Y")
-                if "-" in t['date']: fmt = "%Y-%m-%d"
-                elif "." in t['date']: fmt = "%d.%m.%Y"
-                
-                t_date = datetime.strptime(t['date'], fmt)
-                if prev_start <= t_date <= prev_end:
+             if 'normalized_date' in t:
+                if prev_start.date() <= t['normalized_date'] <= prev_end.date():
                     prev_tx.append(t)
-             except: pass
              
         prev_income = sum(t['amount'] for t in prev_tx if t['amount'] > 0)
         prev_expense = sum(abs(t['amount']) for t in prev_tx if t['amount'] < 0)
@@ -405,6 +414,9 @@ class AnalyticsSubTab(QWidget):
             if item.widget():
                 item.widget().deleteLater()
         
+        # Determine appropriate font size for chart
+        font_size = 8 if (end_date - start_date).days > 7 else 10
+        
         fig = Figure(figsize=(5, 3), dpi=100)
         canvas = FigureCanvas(fig)
         canvas.setStyleSheet("background-color: transparent;")
@@ -427,6 +439,7 @@ class AnalyticsSubTab(QWidget):
             
         for t in transactions:
             try:
+                # Use standardized date from refresh_data
                 d = datetime.strptime(t['date'], "%d.%m.%Y").strftime("%d.%m")
                 if d in data_map:
                     if t['amount'] > 0:
@@ -441,23 +454,20 @@ class AnalyticsSubTab(QWidget):
         
         x = range(len(keys))
         ax.bar(x, inc_vals, width=0.4, label='Доход', color='#2ecc71', align='center')
-        ax.bar(x, exp_vals, width=0.4, label='Расход', color='#e74c3c', align='center', bottom=inc_vals) # Stacked? Or side-by-side? Let's do side by side for clarity
-        
-        # Side by side
-        # ax.clear()
-        # width = 0.35
-        # ax.bar([i - width/2 for i in x], inc_vals, width, label='Доход', color='#2ecc71')
-        # ax.bar([i + width/2 for i in x], exp_vals, width, label='Расход', color='#e74c3c')
+        ax.bar(x, exp_vals, width=0.4, label='Расход', color='#e74c3c', align='center', bottom=inc_vals) 
         
         ax.set_xticks(x)
-        ax.set_xticklabels(keys, rotation=45, color='white')
-        ax.tick_params(axis='y', colors='white')
+        ax.set_xticklabels(keys, rotation=45, color='white', fontsize=font_size)
+        ax.tick_params(axis='y', colors='white', labelsize=font_size)
+        
+        # Legend with explicit font size
+        ax.legend(facecolor='#2b2b2b', labelcolor='white', fontsize=font_size)
+        
         ax.spines['bottom'].set_color('white')
         ax.spines['top'].set_color('none') 
         ax.spines['left'].set_color('white')
         ax.spines['right'].set_color('none')
         
-        ax.legend(facecolor='#2b2b2b', labelcolor='white')
         fig.tight_layout()
         
         self.chart_layout.addWidget(canvas)
