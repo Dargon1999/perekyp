@@ -13,6 +13,7 @@ app_name = "MoneyTracker"
 added_data = [
     ("gui/assets", "gui/assets"),
     ("data.json", "."),
+    ("updater.py", "."), # Добавляем скрипт обновления
 ]
 
 # Иконка для EXE (если есть .ico файл)

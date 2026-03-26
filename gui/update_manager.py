@@ -480,70 +480,41 @@ class UpdateManager(QObject):
         
         if getattr(sys, 'frozen', False):
              # If compiled
-             # 1. Check for internal/bundled updater.exe (in temp dir _MEIPASS)
              meipass = getattr(sys, '_MEIPASS', '')
-             bundled_path = os.path.join(meipass, 'updater.exe')
-             log(f"Checking bundled path: {bundled_path}")
+             
+             # 1. Try to find/use updater.py if it was bundled (running via python)
+             bundled_py = os.path.join(meipass, 'updater.py')
              
              # 2. Check for external updater.exe (next to main exe)
              exe_dir = os.path.dirname(current_exe)
-             ext_path = os.path.join(exe_dir, 'updater.exe')
-             log(f"Checking external path: {ext_path}")
+             ext_exe = os.path.join(exe_dir, 'updater.exe')
              
-             if os.path.exists(bundled_path):
-                 # Copy bundled updater to a temp file to ensure it survives main process exit
-                 try:
-                     temp_updater = os.path.join(temp_dir, f"updater_{uuid.uuid4().hex[:8]}.exe")
-                     shutil.copy2(bundled_path, temp_updater)
-                     updater_path = temp_updater
-                     log(f"Copied bundled updater to temp: {updater_path}")
-                 except Exception as e:
-                     log(f"Failed to copy bundled updater: {e}")
-                     updater_path = bundled_path # Fallback (risky)
-             elif os.path.exists(ext_path):
-                 updater_path = ext_path
-                 log(f"Found external updater: {updater_path}")
+             if os.path.exists(bundled_py):
+                 updater_path = bundled_py
+                 log(f"Found bundled updater.py: {updater_path}")
+             elif os.path.exists(ext_exe):
+                 updater_path = ext_exe
+                 log(f"Found external updater.exe: {updater_path}")
              else:
-                 log("Updater not found in bundled or external paths.")
-                 # Search in parent directories if not found
-                 parent_dir = exe_dir
-                 for i in range(3):
-                     search_path = os.path.join(parent_dir, 'updater.exe')
-                     log(f"Searching in parent ({i}): {search_path}")
-                     if os.path.exists(search_path):
-                         updater_path = search_path
-                         log(f"Found updater in parent: {updater_path}")
-                         break
-                     parent_dir = os.path.dirname(parent_dir)
+                 log("Neither bundled updater.py nor external updater.exe found.")
         else:
             # If dev, look for updater.py in root (cwd)
             updater_path = os.path.join(os.getcwd(), 'updater.py')
             log(f"Dev mode: checking for {updater_path}")
         
-        # EMERGENCY FALLBACK: If updater.exe is still not found, try to download it from server
-        if (not updater_path or not os.path.exists(updater_path)) and getattr(sys, 'frozen', False):
-            log("CRITICAL: updater.exe not found. Attempting emergency download...")
-            try:
-                base_url = self.data_manager.get_global_data("update_server_url", "https://dargon-52si.onrender.com")
-                download_url = f"{base_url.rstrip('/')}/download?file=updater.exe"
-                temp_updater = os.path.join(temp_dir, "updater_downloaded.exe")
-                
-                log(f"Downloading updater from: {download_url}")
-                resp = requests.get(download_url, timeout=15)
-                if resp.status_code == 200:
-                    with open(temp_updater, "wb") as f:
-                        f.write(resp.content)
-                    updater_path = temp_updater
-                    log(f"Emergency download successful: {updater_path}")
-                else:
-                    log(f"Emergency download failed: HTTP {resp.status_code}")
-            except Exception as e:
-                log(f"Emergency download error: {e}")
+        # EMERGENCY FALLBACK: If nothing found, try to locate updater.py in same dir as current script
+        if not updater_path or not os.path.exists(updater_path):
+            curr_dir = os.path.dirname(os.path.abspath(__file__))
+            root_dir = os.path.dirname(curr_dir)
+            alt_path = os.path.join(root_dir, 'updater.py')
+            if os.path.exists(alt_path):
+                updater_path = alt_path
+                log(f"Fallback: Found updater.py in root: {updater_path}")
 
         log(f"Final Resolved updater path: {updater_path}")
         
         if not updater_path or not os.path.exists(updater_path):
-             error_msg = f"Файл updater.exe не найден!"
+             error_msg = f"Файл обновления (updater) не найден!"
              log(f"FATAL ERROR: {error_msg}")
              self.update_error.emit(f"{error_msg}\nЛог: {log_file}")
              return
@@ -555,28 +526,25 @@ class UpdateManager(QObject):
         log(f"Launching updater: {updater_path}")
         log(f"Args: {current_exe}, {new_exe}, {pid}")
 
-        if updater_path.endswith('.py'):
-            try:
-                subprocess.Popen([sys.executable, updater_path, current_exe, new_exe, str(pid)])
-                log("Updater script launched (dev)")
-            except Exception as e:
-                log(f"Failed to launch updater script: {e}")
-        else:
-            try:
-                # Use creationflags to detach on Windows
-                creationflags = 0
-                if sys.platform == 'win32':
-                    # DETACHED_PROCESS = 0x00000008
-                    creationflags = 0x00000008
-                
+        # Determine how to launch
+        is_python = updater_path.endswith('.py')
+        
+        try:
+            if is_python:
+                # Launch via python interpreter
+                subprocess.Popen([sys.executable, updater_path, current_exe, new_exe, str(pid)], 
+                                 creationflags=0x00000008 if sys.platform == 'win32' else 0)
+                log("Updater script launched successfully")
+            else:
+                # Launch EXE directly
                 subprocess.Popen([updater_path, current_exe, new_exe, str(pid)], 
                                  cwd=os.path.dirname(updater_path),
-                                 creationflags=creationflags)
+                                 creationflags=0x00000008 if sys.platform == 'win32' else 0)
                 log("Updater EXE launched successfully")
-            except Exception as e:
-                log(f"Failed to launch updater EXE: {e}")
-                self.update_error.emit(f"Не удалось запустить updater: {e}\nЛог: {log_file}")
-                return
+        except Exception as e:
+            log(f"Failed to launch updater: {e}")
+            self.update_error.emit(f"Не удалось запустить процесс обновления: {e}\nЛог: {log_file}")
+            return
         
         log("--- Application exiting to allow update ---")
         # Exit immediately
