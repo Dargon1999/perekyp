@@ -62,12 +62,12 @@ def cleanup_update_files():
 
 
 def main():
+    # Setup logging early for debugging
     setup_logging()
     cleanup_update_files()
 
     # Set App User Model ID (Windows taskbar icon fix)
     try:
-        # Changed ID to force icon cache refresh
         myappid = APP_ID
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
     except Exception as e:
@@ -80,20 +80,17 @@ def main():
     # --- STARTUP CHECKS ---
     startup_mgr = StartupManager(APP_ID)
     
-    # 1. Single Instance Check
+    # 1. Single Instance Check (MUST be before other operations)
     if not startup_mgr.check_single_instance():
         logging.warning("Another instance is already running. Exiting.")
-        # Показываем уведомление пользователю
         startup_mgr._show_error("Ошибка запуска", "Приложение уже запущено.\nПожалуйста, закройте другие копии программы.")
         sys.exit(0)
 
     # 2. Permissions Check
-    # Проверяем папку данных и логов
     app_data = os.getenv('LOCALAPPDATA') or os.path.expanduser('~')
     money_tracker_dir = os.path.join(app_data, "MoneyTracker")
     logs_dir = os.path.join(money_tracker_dir, "logs")
     
-    # Если портативный режим (есть data.json рядом), проверяем текущую папку
     is_portable = False
     if getattr(sys, 'frozen', False):
         base_dir = os.path.dirname(sys.executable)
@@ -154,7 +151,7 @@ def main():
     app.setStyleSheet(StyleManager.get_qss("dark"))
 
     font = app.font()
-    font.setPointSize(10)
+    font.setPointSize(max(10, font.pointSize()))
     app.setFont(font)
 
     # -------------------------------

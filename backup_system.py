@@ -12,7 +12,6 @@ class BackupSystem:
             os.makedirs(self.backup_dir)
 
     def create_backup(self):
-        """Creates a timestamped backup of the database."""
         if not os.path.exists(self.db_path):
             logging.warning(f"Database file {self.db_path} not found for backup.")
             return None
@@ -22,13 +21,8 @@ class BackupSystem:
         backup_path = os.path.join(self.backup_dir, backup_name)
         
         try:
-            # Use SQLite backup API for online backup (safest while the app is running)
-            src = sqlite3.connect(self.db_path)
-            dst = sqlite3.connect(backup_path)
-            with dst:
+            with sqlite3.connect(self.db_path) as src, sqlite3.connect(backup_path) as dst:
                 src.backup(dst)
-            dst.close()
-            src.close()
             
             logging.info(f"Database backup created: {backup_path}")
             self.cleanup_old_backups(keep=30)
@@ -38,17 +32,19 @@ class BackupSystem:
             return None
 
     def cleanup_old_backups(self, keep=30):
-        """Removes old backups, keeping only the most recent N."""
         try:
             backups = sorted([
                 os.path.join(self.backup_dir, f) 
                 for f in os.listdir(self.backup_dir) 
-                if f.endswith(".db")
+                if f.endswith(".db") and os.path.isfile(os.path.join(self.backup_dir, f))
             ], key=os.path.getmtime)
             
             if len(backups) > keep:
                 for b in backups[:-keep]:
-                    os.remove(b)
-                    logging.info(f"Removed old backup: {b}")
+                    try:
+                        os.remove(b)
+                        logging.info(f"Removed old backup: {b}")
+                    except OSError as e:
+                        logging.warning(f"Failed to remove backup {b}: {e}")
         except Exception as e:
             logging.error(f"Error cleaning up backups: {e}")

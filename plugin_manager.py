@@ -33,7 +33,6 @@ class PluginManager:
 
     def discover_plugins(self):
         if not os.path.exists(self.plugins_dir):
-            os.makedirs(self.plugins_dir)
             return
 
         for plugin_name in os.listdir(self.plugins_dir):

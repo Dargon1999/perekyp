@@ -9,58 +9,75 @@ import sys
 import logging
 import time
 import hashlib
+import threading
+import bisect
+from collections import OrderedDict
 from datetime import datetime
+from functools import lru_cache
 from PyQt6.QtCore import Qt, QByteArray, QBuffer, QIODevice, pyqtSignal, QObject
 from PyQt6.QtGui import QPixmap, QPainter
 from utils import Money
 
-
 APP_NAME = "MoneyTracker"
 
+_data_paths_cache = None
+_data_paths_lock = threading.Lock()
+
 def get_base_paths():
-    """Determine data directory based on presence of local data.json (Portable Mode)."""
-    # 1. Determine base executable path
-    if getattr(sys, 'frozen', False):
-        base_path = os.path.dirname(sys.executable)
-    else:
-        # Development mode: Check script directory first, then CWD
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        cwd = os.getcwd()
+    global _data_paths_cache
+    if _data_paths_cache is not None:
+        return _data_paths_cache
+    
+    with _data_paths_lock:
+        if _data_paths_cache is not None:
+            return _data_paths_cache
         
-        # If data.json exists in the script directory (project root), use it.
-        # This handles cases where the user runs the script from a different directory.
-        if os.path.exists(os.path.join(script_dir, "data.json")):
-            base_path = script_dir
+        if getattr(sys, 'frozen', False):
+            base_path = os.path.dirname(sys.executable)
         else:
-            base_path = cwd
-    
-    local_data = os.path.join(base_path, "data.json")
-    
-    if os.path.exists(local_data):
-        # Portable mode detected
-        return base_path
-    else:
-        # Standard installation mode
-        return os.path.join(os.getenv("APPDATA"), APP_NAME)
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            cwd = os.getcwd()
+            if os.path.exists(os.path.join(script_dir, "data.json")):
+                base_path = script_dir
+            else:
+                base_path = cwd
+        
+        local_data = os.path.join(base_path, "data.json")
+        
+        if os.path.exists(local_data):
+            _data_paths_cache = base_path
+        else:
+            path = os.path.join(os.getenv("APPDATA"), APP_NAME)
+            os.makedirs(path, exist_ok=True)
+            _data_paths_cache = path
+        
+        return _data_paths_cache
+
+def _get_paths():
+    base = get_base_paths()
+    return {
+        "data_dir": base,
+        "data_file": os.path.join(base, "data.json"),
+        "images_dir": os.path.join(base, "images")
+    }
 
 if __name__ == "__main__":
-    # If run as a script (e.g. by PyInstaller), do not initialize anything that requires a GUI or environment variables.
     pass
 else:
-    # Standard initialization mode
-    DATA_DIR = get_base_paths()
-    DATA_FILE = os.path.join(DATA_DIR, "data.json")
-    IMAGES_DIR = os.path.join(DATA_DIR, "images")
-
-    # Ensure the data directory exists
+    paths = _get_paths()
+    DATA_DIR = paths["data_dir"]
+    DATA_FILE = paths["data_file"]
+    IMAGES_DIR = paths["images_dir"]
     os.makedirs(DATA_DIR, exist_ok=True)
     os.makedirs(IMAGES_DIR, exist_ok=True)
 
 class DataManager(QObject):
     data_changed = pyqtSignal()
     
-    # Static cache for pixmaps to avoid repeated file reads and scaling
-    _pixmap_cache = {}
+    _pixmap_cache = OrderedDict()
+    _cache_lock = threading.Lock()
+    _data_lock = threading.RLock()
+    _MAX_CACHE_SIZE = 200
 
     def __init__(self, filename=None):
         super().__init__()
@@ -163,22 +180,19 @@ class DataManager(QObject):
         return pix
 
     def load_pixmap(self, path, max_size=None):
-        """
-        Loads a QPixmap from a path (file path or Base64 data URI).
-        Handles path resolution, caching and errors.
-        """
         if not path:
             return QPixmap()
         
-        # 0. Check Cache
         cache_key = f"{path}_{max_size}"
-        if cache_key in self._pixmap_cache:
-            return self._pixmap_cache[cache_key]
+        
+        with self._cache_lock:
+            if cache_key in self._pixmap_cache:
+                self._pixmap_cache.move_to_end(cache_key)
+                return self._pixmap_cache[cache_key]
             
         resolved = self.resolve_image_path(path)
         pix = QPixmap()
         
-        # 1. Base64 Handling
         if resolved.startswith("data:image"):
             try:
                 header, data = resolved.split(',', 1)
@@ -187,8 +201,6 @@ class DataManager(QObject):
             except Exception as e:
                 logging.error(f"Failed to load Base64 image: {e}")
                 return self.get_placeholder_pixmap(text="Error")
-
-        # 2. File Path Handling
         else:
             if not os.path.exists(resolved) or os.path.isdir(resolved):
                 logging.warning(f"Image not found or is dir: {resolved}")
@@ -205,13 +217,13 @@ class DataManager(QObject):
             w, h = max_size
             pix = pix.scaled(w, h, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
         
-        # 3. Store in Cache (Limit cache size to prevent memory leak)
-        if len(self._pixmap_cache) > 500:
-             # Simple eviction: clear 100 oldest items
-             keys_to_remove = list(self._pixmap_cache.keys())[:100]
-             for k in keys_to_remove: del self._pixmap_cache[k]
-             
-        self._pixmap_cache[cache_key] = pix
+        with self._cache_lock:
+            if len(self._pixmap_cache) >= self._MAX_CACHE_SIZE:
+                evicted_keys = list(self._pixmap_cache.keys())[:50]
+                for k in evicted_keys:
+                    del self._pixmap_cache[k]
+            self._pixmap_cache[cache_key] = pix
+        
         return pix
 
     def save_image_to_base64(self, pixmap):
@@ -385,7 +397,15 @@ class DataManager(QObject):
             
         return migrated_data
 
+    def get_data_dir(self):
+        """Returns the absolute path to the data directory."""
+        return os.path.dirname(os.path.abspath(self.filename))
+
     def save_data(self):
+        # Clear calculation caches when data changes
+        self.get_category_stats.cache_clear()
+        self.get_total_capital_balance.cache_clear()
+        
         # Create backup before saving
         self.perform_scheduled_backup()
         
@@ -479,14 +499,13 @@ class DataManager(QObject):
         try:
             shutil.copy2(self.filename, local_backup_path)
             
-            # Keep only last 10 backups locally
-            backups = sorted([os.path.join(backup_dir, f) for f in os.listdir(backup_dir) if f.startswith("data_backup_")])
+            backups = sorted([os.path.join(backup_dir, f) for f in os.listdir(backup_dir) if f.startswith("data_backup_") and os.path.isfile(os.path.join(backup_dir, f))])
             if len(backups) > 10:
                 for b in backups[:-10]:
                     try:
                         os.remove(b)
-                    except:
-                        pass
+                    except OSError as e:
+                        logging.warning(f"Failed to remove old backup {b}: {e}")
         except Exception as e:
             print(f"Local backup failed: {e}")
             logging.error(f"Local backup failed: {e}")
@@ -499,13 +518,13 @@ class DataManager(QObject):
                 
                 # Cleanup in extra channel (optional, maybe keep more?)
                 # Let's keep last 10 there too to avoid clutter
-                extra_backups = sorted([os.path.join(extra_channel, f) for f in os.listdir(extra_channel) if f.startswith("data_backup_")])
+                extra_backups = sorted([os.path.join(extra_channel, f) for f in os.listdir(extra_channel) if f.startswith("data_backup_") and os.path.isfile(os.path.join(extra_channel, f))])
                 if len(extra_backups) > 10:
                     for b in extra_backups[:-10]:
                         try:
                             os.remove(b)
-                        except:
-                            pass
+                        except OSError as e:
+                            logging.warning(f"Failed to remove extra backup {b}: {e}")
                 print(f"Backup saved to extra channel: {extra_backup_path}")
             except Exception as e:
                 print(f"Extra channel backup failed: {e}")
@@ -640,24 +659,27 @@ class DataManager(QObject):
         self.data["global"][key] = value
         self.save_data()
 
-    # --- Secure Storage (Simple Encryption) ---
+    # --- Secure Storage (Fernet Encryption) ---
 
     def _get_encryption_key(self):
-        # Generate a consistent key based on a fixed salt
-        salt = "MoneyTracker_Secure_Salt_2025_v8"
-        return hashlib.sha256(salt.encode()).digest()
+        try:
+            from cryptography.fernet import Fernet
+            salt = f"MoneyTracker_{APP_NAME}_{get_base_paths()}".encode()
+            key = hashlib.sha256(salt).digest()
+            return base64.urlsafe_b64encode(key)
+        except ImportError:
+            logging.warning("cryptography not installed, using fallback XOR encryption")
+            return hashlib.sha256(f"MoneyTracker_Secure_Salt_2025_v9".encode()).digest()
 
     def encrypt_value(self, value):
         if not value: return ""
         try:
-            # Simple XOR encryption with the hash key
             key = self._get_encryption_key()
-            value_bytes = value.encode('utf-8')
-            encrypted = bytearray()
-            for i in range(len(value_bytes)):
-                encrypted.append(value_bytes[i] ^ key[i % len(key)])
-            # Encode to Base64 for storage
-            return base64.b64encode(encrypted).decode('utf-8')
+            if isinstance(key, bytes) and len(key) == 32:
+                from cryptography.fernet import Fernet
+                key = base64.urlsafe_b64encode(key)
+            f = Fernet(key)
+            return f.encrypt(value.encode('utf-8')).decode('utf-8')
         except Exception as e:
             logging.error(f"Encryption error: {e}")
             return ""
@@ -665,13 +687,12 @@ class DataManager(QObject):
     def decrypt_value(self, value):
         if not value: return ""
         try:
-            # Decode from Base64
-            encrypted_bytes = base64.b64decode(value)
             key = self._get_encryption_key()
-            decrypted = bytearray()
-            for i in range(len(encrypted_bytes)):
-                decrypted.append(encrypted_bytes[i] ^ key[i % len(key)])
-            return decrypted.decode('utf-8')
+            if isinstance(key, bytes) and len(key) == 32:
+                from cryptography.fernet import Fernet
+                key = base64.urlsafe_b64encode(key)
+            f = Fernet(key)
+            return f.decrypt(value.encode('utf-8')).decode('utf-8')
         except Exception as e:
             logging.error(f"Decryption error: {e}")
             return ""
@@ -701,6 +722,11 @@ class DataManager(QObject):
             if "settings" not in profile:
                 profile["settings"] = {}
             profile["settings"][key] = value
+            
+            # Special case: if starting_amount is updated via settings
+            if key == "starting_amount":
+                profile["starting_amount"] = float(value)
+                
             self.save_data()
 
     # --- Profile Helpers ---
@@ -1022,12 +1048,24 @@ class DataManager(QObject):
     def get_trade_inventory(self, category):
         profile = self.get_active_profile()
         if not profile: return []
-        return profile.get(category, {}).get("inventory", [])
+        items = profile.get(category, {}).get("inventory", [])
+        
+        try:
+            items.sort(key=lambda x: datetime.strptime(x.get("date_added", "01.01.2000 00:00:00"), "%d.%m.%Y %H:%M:%S"), reverse=True)
+        except ValueError as e:
+            logging.warning(f"Failed to sort inventory: {e}")
+        return items
 
     def get_trade_sold(self, category):
         profile = self.get_active_profile()
         if not profile: return []
-        return profile.get(category, {}).get("sold_history", [])
+        items = profile.get(category, {}).get("sold_history", [])
+        
+        try:
+            items.sort(key=lambda x: datetime.strptime(x.get("date_sold", x.get("date_added", "01.01.2000 00:00:00")), "%d.%m.%Y %H:%M:%S"), reverse=True)
+        except ValueError as e:
+            logging.warning(f"Failed to sort sold history: {e}")
+        return items
 
     # --- Legacy Clothes Wrappers ---
 
@@ -1111,15 +1149,36 @@ class DataManager(QObject):
         if not date_str:
             date_str = datetime.now().strftime("%d.%m.%Y")
 
+        main_id = str(uuid.uuid4())
+        now_ts = time.time() # Use high-precision timestamp for sorting
+        
         transaction = {
-            "id": str(uuid.uuid4()),
+            "id": main_id,
             "date": date_str,
             "amount": float(amount),
             "comment": comment,
             "item_name": item_name,
             "image_path": image_path,
-            "ad_cost": float(ad_cost) if ad_cost else 0.0
+            "ad_cost": float(ad_cost) if ad_cost else 0.0,
+            "timestamp": now_ts
         }
+
+        transactions_to_add = [transaction]
+
+        # Create separate ad cost transaction if needed
+        if float(ad_cost) > 0:
+            ad_transaction = {
+                "id": str(uuid.uuid4()),
+                "date": date_str,
+                "amount": -float(ad_cost),
+                "comment": f"Объявление: {item_name}",
+                "item_name": item_name,
+                "image_path": None,
+                "parent_id": main_id, # Link to main transaction
+                "is_ad_cost": True,
+                "timestamp": now_ts - 0.001 # Slightly older so it appears below main
+            }
+            transactions_to_add.append(ad_transaction)
 
         if category in ["car_rental", "mining", "farm_bp", "fishing"]:
             if category not in profile:
@@ -1127,16 +1186,26 @@ class DataManager(QObject):
             if "transactions" not in profile[category]:
                 profile[category]["transactions"] = []
                 
-            profile[category]["transactions"].append(transaction)
+            for t in transactions_to_add:
+                profile[category]["transactions"].append(t)
+            
+            # Sort by date DESC, then by timestamp DESC (to keep newest at top if same date)
             try:
-                profile[category]["transactions"].sort(key=lambda x: datetime.strptime(x["date"], "%d.%m.%Y"), reverse=True)
+                profile[category]["transactions"].sort(
+                    key=lambda x: (datetime.strptime(x["date"], "%d.%m.%Y"), x.get("timestamp", 0)), 
+                    reverse=True
+                )
             except ValueError:
                  profile[category]["transactions"].sort(key=lambda x: x["date"], reverse=True)
         else:
             if "transactions" not in profile: profile["transactions"] = []
-            profile["transactions"].append(transaction)
+            for t in transactions_to_add:
+                profile["transactions"].append(t)
             try:
-                profile["transactions"].sort(key=lambda x: datetime.strptime(x["date"], "%d.%m.%Y"), reverse=True)
+                profile["transactions"].sort(
+                    key=lambda x: (datetime.strptime(x["date"], "%d.%m.%Y"), x.get("timestamp", 0)), 
+                    reverse=True
+                )
             except ValueError:
                 profile["transactions"].sort(key=lambda x: x["date"], reverse=True)
 
@@ -1154,8 +1223,20 @@ class DataManager(QObject):
         else:
             target_list = profile.get("transactions", [])
 
+        # Find the transaction to see if it has a linked ad cost or is a linked ad cost
+        main_tx = next((t for t in target_list if t["id"] == transaction_id), None)
+        if not main_tx: return False
+
+        ids_to_delete = {transaction_id}
+        
+        # If this is a main transaction, delete its linked ad cost too
+        # If this is an ad cost transaction, just delete it (or maybe delete main too? Let's stick to just deleting the ad cost for now if user chooses so, but usually deleting main should delete ad cost)
+        for t in target_list:
+            if t.get("parent_id") == transaction_id:
+                ids_to_delete.add(t["id"])
+
         original_len = len(target_list)
-        new_list = [t for t in target_list if t["id"] != transaction_id]
+        new_list = [t for t in target_list if t["id"] not in ids_to_delete]
         
         if len(new_list) < original_len:
             if category in ["car_rental", "mining", "farm_bp", "fishing"]:
@@ -1185,8 +1266,39 @@ class DataManager(QObject):
                 t["image_path"] = image_path
                 t["ad_cost"] = float(ad_cost) if ad_cost else 0.0
                 
+                # Update or create/delete linked ad cost transaction
+                ad_tx = next((tx for tx in target_list if tx.get("parent_id") == transaction_id), None)
+                
+                if float(ad_cost) > 0:
+                    if ad_tx:
+                        # Update existing
+                        ad_tx["amount"] = -float(ad_cost)
+                        ad_tx["date"] = date_str
+                        ad_tx["item_name"] = item_name
+                        ad_tx["comment"] = f"Объявление: {item_name}"
+                    else:
+                        # Create new
+                        new_ad_tx = {
+                            "id": str(uuid.uuid4()),
+                            "date": date_str,
+                            "amount": -float(ad_cost),
+                            "comment": f"Объявление: {item_name}",
+                            "item_name": item_name,
+                            "image_path": None,
+                            "parent_id": transaction_id,
+                            "is_ad_cost": True
+                        }
+                        target_list.append(new_ad_tx)
+                else:
+                    # Delete existing if ad_cost is now 0
+                    if ad_tx:
+                        target_list.remove(ad_tx)
+
                 try:
-                    target_list.sort(key=lambda x: datetime.strptime(x["date"], "%d.%m.%Y"), reverse=True)
+                    target_list.sort(
+                        key=lambda x: (datetime.strptime(x["date"], "%d.%m.%Y"), x.get("timestamp", 0)), 
+                        reverse=True
+                    )
                 except ValueError:
                     target_list.sort(key=lambda x: x["date"], reverse=True)
                     
@@ -1215,6 +1327,7 @@ class DataManager(QObject):
             return profile[category].get("starting_amount", 0.0)
         return 0.0
 
+    @lru_cache(maxsize=128)
     def get_category_stats(self, category):
         profile = self.get_active_profile()
         if not profile: return None
@@ -1243,8 +1356,12 @@ class DataManager(QObject):
                 expenses = Money(0)
                 for item in inventory:
                     expenses += Money.from_major(item.get("buy_price", 0))
+                    # Add cost of appearance to expenses
+                    expenses += Money.from_major(item.get("cost_of_appearance", 0))
                 for item in sold:
                     expenses += Money.from_major(item.get("buy_price", 0))
+                    # Add cost of appearance to expenses
+                    expenses += Money.from_major(item.get("cost_of_appearance", 0))
             
             pure_profit = income - expenses
             
@@ -1269,9 +1386,16 @@ class DataManager(QObject):
                 if amt.amount > 0: income += amt
                 else: expenses += abs(amt)
                 
-                # Add ad cost
-                ad_cost = Money.from_major(t.get("ad_cost", 0.0))
-                expenses += ad_cost
+                # Only add ad_cost from the field if it's NOT already a separate transaction
+                # (separate transactions have is_ad_cost=True and are already counted in expenses)
+                # But wait, the main transaction still has the ad_cost field. 
+                # If we have a separate transaction, we should ignore the field.
+                # If we don't have a separate transaction (old data), we should use the field.
+                
+                has_separate_ad_tx = any(tx.get("parent_id") == t["id"] for tx in transactions)
+                if not has_separate_ad_tx:
+                    ad_cost = Money.from_major(t.get("ad_cost", 0.0))
+                    expenses += ad_cost
             
             pure_profit = income - expenses
             
@@ -1282,6 +1406,7 @@ class DataManager(QObject):
             }
         return None
 
+    @lru_cache(maxsize=32)
     def get_total_capital_balance(self):
         """Calculates total liquid cash and total net worth across all modules."""
         profile = self.get_active_profile()
@@ -1289,14 +1414,18 @@ class DataManager(QObject):
             return {"liquid_cash": 0.0, "net_worth": 0.0}
 
         # Base starting amount from profile
-        liquid_cash = Money.from_major(profile.get("starting_amount", 0.0))
+        starting_amount = profile.get("starting_amount", 0.0)
+        liquid_cash = Money.from_major(starting_amount)
         net_worth = Money(liquid_cash.amount)
+
+        # Debug log for calculation
+        logging.info(f"Balance calc: starting_amount={starting_amount}")
 
         # Categories with simple transactions (Income/Expenses)
         for cat in ["car_rental", "mining", "farm_bp", "fishing"]:
             stats = self.get_category_stats(cat)
             if stats:
-                profit = Money.from_major(stats["pure_profit"])
+                profit = Money.from_major(stats.get("pure_profit", 0.0))
                 liquid_cash += profit
                 net_worth += profit
 
@@ -1304,10 +1433,7 @@ class DataManager(QObject):
         for cat in ["clothes", "clothes_new", "cars_trade"]:
             stats = self.get_category_stats(cat)
             if stats:
-                # liquid_cash = starting + income - (expenses_inventory + expenses_sold)
-                # This is already handled in get_category_stats["current_balance"] relative to category starting amount.
-                # However, we want to add the PROFIT from these categories to the GLOBAL liquid cash.
-                profit = Money.from_major(stats["pure_profit"])
+                profit = Money.from_major(stats.get("pure_profit", 0.0))
                 liquid_cash += profit
                 
                 # Net worth includes the value of items currently in inventory
@@ -1316,7 +1442,7 @@ class DataManager(QObject):
                 for item in inventory:
                     inventory_value += Money.from_major(item.get("buy_price", 0))
                 
-                net_worth = liquid_cash + inventory_value
+                net_worth += inventory_value
 
         return {
             "liquid_cash": liquid_cash.to_major(),
@@ -1399,12 +1525,48 @@ class DataManager(QObject):
         transactions = []
         if category in ["car_rental", "mining", "farm_bp", "fishing"] and category in profile:
              transactions = profile[category].get("transactions", [])
-        elif category not in ["car_rental", "mining", "farm_bp", "fishing"]:
+        elif category in ["clothes", "clothes_new", "cars_trade"] and category in profile:
+             # Trade categories: calculate from inventory and sold_history
+             inventory = profile[category].get("inventory", [])
+             sold = profile[category].get("sold_history", [])
+             
+             for item in inventory:
+                 name = item.get("name", "Неизвестно")
+                 if not name or name == "Неизвестно":
+                     name = "Расходы"
+                 
+                 if name not in stats:
+                     stats[name] = {"count": 0, "income": 0, "expenses": 0, "profit": 0}
+                 
+                 buy_price = float(item.get("buy_price", 0))
+                 coa_price = float(item.get("cost_of_appearance", 0))
+                 
+                 stats[name]["expenses"] += buy_price + coa_price
+                 stats[name]["profit"] -= (buy_price + coa_price)
+                 
+             for item in sold:
+                 name = item.get("name", "Неизвестно")
+                 if not name or name == "Неизвестно":
+                     name = "Расходы"
+                 
+                 if name not in stats:
+                     stats[name] = {"count": 0, "income": 0, "expenses": 0, "profit": 0}
+                 
+                 buy_price = float(item.get("buy_price", 0))
+                 sell_price = float(item.get("sell_price", 0))
+                 coa_price = float(item.get("cost_of_appearance", 0))
+                 
+                 stats[name]["count"] += 1 # Sold = 1 deal
+                 stats[name]["income"] += sell_price
+                 stats[name]["expenses"] += buy_price + coa_price
+                 stats[name]["profit"] += (sell_price - buy_price - coa_price)
+        else:
              transactions = profile.get("transactions", [])
         
         for t in transactions:
-            name = t.get("item_name", "Неизвестно")
-            if not name: name = "Неизвестно"
+            name = t.get("item_name", "")
+            if not name:
+                name = "Расходы" if t.get("amount", 0) < 0 else "Доходы"
             
             if name not in stats:
                 stats[name] = {"count": 0, "income": 0, "expenses": 0, "profit": 0}
@@ -1412,6 +1574,8 @@ class DataManager(QObject):
             amount = t.get("amount", 0)
             
             # Only count Income transactions as "Deals"
+            # Separate ad cost transactions have is_ad_cost=True and amount < 0, 
+            # so they won't be counted as deals.
             if amount > 0:
                 stats[name]["count"] += 1
             
@@ -1420,13 +1584,16 @@ class DataManager(QObject):
             else:
                 stats[name]["expenses"] += abs(amount)
                 
-            # Add ad cost to expenses and subtract from profit
-            ad_cost = t.get("ad_cost", 0.0)
-            if ad_cost > 0:
-                stats[name]["expenses"] += ad_cost
-                
             stats[name]["profit"] += amount
-            stats[name]["profit"] -= ad_cost
+
+            # Add ad cost to expenses and subtract from profit
+            # Only if not already a separate transaction
+            has_separate_ad_tx = any(tx.get("parent_id") == t["id"] for tx in transactions)
+            if not has_separate_ad_tx:
+                ad_cost = t.get("ad_cost", 0.0)
+                if ad_cost > 0:
+                    stats[name]["expenses"] += ad_cost
+                    stats[name]["profit"] -= ad_cost
             
         # 2. Apply offsets
         if "item_stats_offsets" in profile and category in profile["item_stats_offsets"]:
@@ -1452,25 +1619,6 @@ class DataManager(QObject):
             
         profile["item_stats_offsets"][category][item_name]["count"] = offset
         self.save_data()
-
-    def get_unique_item_names(self, category):
-        profile = self.get_active_profile()
-        if not profile: return []
-        
-        transactions = []
-        if category in ["car_rental", "mining", "farm_bp"]:
-            if category in profile:
-                transactions = profile[category].get("transactions", [])
-        else:
-            transactions = profile.get("transactions", [])
-            
-        names = set()
-        for t in transactions:
-            name = t.get("item_name")
-            if name:
-                names.add(name)
-        
-        return sorted(list(names))
 
     def add_clothes_item(self, name, buy_price, note, photo_path):
         return self.add_trade_item("clothes", name, buy_price, note, photo_path)

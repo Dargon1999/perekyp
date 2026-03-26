@@ -58,8 +58,8 @@ def update_and_restart(target_exe, update_file, pid_to_wait):
         try:
             import ctypes
             ctypes.windll.user32.MessageBoxW(0, str(msg), "Ошибка обновления", 0x10)
-        except:
-            pass
+        except Exception as e:
+            logging.warning(f"Could not show error dialog: {e}")
 
     # Protection against infinite restart loop
     restart_count_file = os.path.join(log_dir, "restart_count.tmp")
@@ -98,12 +98,14 @@ def update_and_restart(target_exe, update_file, pid_to_wait):
                     process = ctypes.windll.kernel32.OpenProcess(SYNCHRONIZE, False, pid)
                     if process:
                         res = ctypes.windll.kernel32.WaitForSingleObject(process, 1000)
-                        ctypes.windll.kernel32.CloseHandle(process)
-                        if res == 0: # WAIT_OBJECT_0
+                        if process:
+                            ctypes.windll.kernel32.CloseHandle(process)
+                        if res == 0:
                             break
                     else:
                         break
-                except:
+                except Exception as e:
+                    logging.warning(f"Process wait error: {e}")
                     break
                 time.sleep(0.5)
             
@@ -130,8 +132,11 @@ def update_and_restart(target_exe, update_file, pid_to_wait):
                 
                 # 1. Remove old backup
                 if os.path.exists(backup_file):
-                    try: os.remove(backup_file)
-                    except: pass
+                    try: 
+                        os.remove(backup_file)
+                        logging.debug(f"Removed old backup: {backup_file}")
+                    except OSError as e:
+                        logging.warning(f"Could not remove old backup: {e}")
 
                 # 2. Rename current to backup
                 if os.path.exists(target_exe):
@@ -153,8 +158,11 @@ def update_and_restart(target_exe, update_file, pid_to_wait):
                 logging.warning(f"Attempt {i+1} failed: {e}")
                 # Rollback if possible
                 if os.path.exists(backup_file) and not os.path.exists(target_exe):
-                    try: os.rename(backup_file, target_exe)
-                    except: pass
+                    try: 
+                        os.rename(backup_file, target_exe)
+                        logging.info("Rollback successful")
+                    except OSError as re:
+                        logging.error(f"Rollback failed: {re}")
                 time.sleep(1)
                 
     except Exception as e:
@@ -164,8 +172,11 @@ def update_and_restart(target_exe, update_file, pid_to_wait):
     if success:
         # Cleanup
         if os.path.exists(backup_file):
-            try: os.remove(backup_file)
-            except: pass
+            try: 
+                os.remove(backup_file)
+                logging.debug(f"Cleaned up backup file: {backup_file}")
+            except OSError as e:
+                logging.warning(f"Could not remove backup file: {e}")
             
         # Restart
         try:

@@ -343,9 +343,6 @@ class TransactionDialog(QDialog, ResizeMixin):
                 # Optional: Clear main amount or set to 0 if preferred, but usually user enters it.
                 # self.amount_input.setText("0") # Leaving it empty/default is better for UX.
                 
-                if not self.comment_input.text():
-                    self.comment_input.setText("") # Don't auto-fill "Ad Cost" note on main income
-                
                 self.update_type_styles()
 
     def apply_styles(self):

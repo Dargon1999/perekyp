@@ -74,7 +74,6 @@ def build_main():
         '--exclude-module=PyQt6.QtVirtualKeyboard',
         '--exclude-module=PyQt6.QtTest',
         '--exclude-module=PyQt6.QtSensors',
-        '--exclude-module=PyQt6.QtMultimedia',
         '--exclude-module=PyQt6.QtPositioning',
         '--exclude-module=PyQt6.QtQuickWidgets',
         '--exclude-module=PyQt6.QtQuick3D',

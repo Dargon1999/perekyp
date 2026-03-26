@@ -27,8 +27,8 @@
 1. Создайте новый **Web Service** на Render.
 2. Подключите ваш репозиторий GitHub.
 3. Настройки:
-   - **Build Command**: `pip install -r website/requirements.txt`
-   - **Start Command**: `gunicorn --chdir website app:app`
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `gunicorn wsgi:app`
 4. Добавьте переменную окружения `JWT_SECRET_KEY` (любая длинная строка).
 
 ## 📊 Firebase

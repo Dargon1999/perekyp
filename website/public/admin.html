@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход в систему | Cyber Ledger</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: #050505;
+        }
+        .login-card {
+            background: #111;
+            padding: 40px;
+            border: 1px solid var(--primary);
+            box-shadow: var(--neon-glow);
+            width: 100%;
+            max-width: 400px;
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+        }
+        .login-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: conic-gradient(transparent, transparent, transparent, var(--primary));
+            animation: rotate 4s linear infinite;
+            z-index: -1;
+        }
+        @keyframes rotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .login-inner {
+            background: #111;
+            position: relative;
+            z-index: 1;
+        }
+        h2 {
+            color: var(--primary);
+            text-align: center;
+            margin-bottom: 30px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            text-shadow: var(--neon-glow);
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            color: var(--text-muted);
+            font-size: 12px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+        input {
+            width: 100%;
+            background: #000;
+            border: 1px solid #333;
+            color: #fff;
+            padding: 12px;
+            font-family: 'Inter', sans-serif;
+            transition: var(--transition);
+        }
+        input:focus {
+            border-color: var(--primary);
+            outline: none;
+            box-shadow: var(--neon-glow);
+        }
+        #error {
+            color: var(--accent);
+            font-size: 12px;
+            text-align: center;
+            margin-bottom: 20px;
+            display: none;
+            text-shadow: 0 0 5px var(--accent);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="bg-canvas"></canvas>
+    
+    <div class="login-card">
+        <div class="login-inner">
+            <h2 id="form-title">Авторизация</h2>
+            <div id="error">ДОСТУП ЗАПРЕЩЕН: НЕВЕРНЫЙ КОД</div>
+            
+            <div id="login-fields">
+                <div class="input-group">
+                    <label>Email адрес</label>
+                    <input type="email" id="user" placeholder="EMAIL ADDRESS">
+                </div>
+                <div class="input-group">
+                    <label>Пароль</label>
+                    <input type="password" id="pass" placeholder="PASSWORD">
+                </div>
+                <button onclick="doLogin()" id="login-btn" class="btn btn-primary" style="width: 100%; justify-content: center; margin-top: 10px;">
+                    ВЫПОЛНИТЬ ВХОД
+                </button>
+            </div>
+
+            <div id="register-fields" style="display: none;">
+                <div class="input-group">
+                    <label>Email адрес</label>
+                    <input type="email" id="reg-email" placeholder="EMAIL">
+                </div>
+                <div class="input-group">
+                    <label>Имя пользователя</label>
+                    <input type="text" id="reg-user" placeholder="USERNAME">
+                </div>
+                <div class="input-group">
+                    <label>Пароль</label>
+                    <input type="password" id="reg-pass" placeholder="PASSWORD">
+                </div>
+                <div class="input-group">
+                    <label>Подтверждение пароля</label>
+                    <input type="password" id="reg-confirm" placeholder="CONFIRM PASSWORD">
+                </div>
+                <div class="input-group">
+                    <label>Код администратора</label>
+                    <input type="password" id="reg-admin-code" placeholder="ADMIN CODE">
+                </div>
+                <button onclick="doRegister()" id="reg-btn" class="btn btn-primary" style="width: 100%; justify-content: center; margin-top: 10px;">
+                    ЗАРЕГИСТРИРОВАТЬСЯ
+                </button>
+            </div>
+            
+            <div style="text-align: center; margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
+                <a href="javascript:void(0)" id="toggle-mode" onclick="toggleMode()" style="color: var(--primary); text-decoration: none; font-size: 12px; text-transform: uppercase; font-weight: bold;">Создать аккаунт</a>
+                <a href="index.html" style="color: var(--text-muted); text-decoration: none; font-size: 12px; text-transform: uppercase;">Вернуться на главную</a>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, updateProfile } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+
+        const firebaseConfig = { 
+            apiKey: "AIzaSyCkuuMhAgsojUF1OslO7zSMrC3dKxoAo-U", 
+            authDomain: "perekyprp.firebaseapp.com", 
+            projectId: "perekyprp", 
+            storageBucket: "perekyprp.firebasestorage.app", 
+            messagingSenderId: "286165285193", 
+            appId: "1:286165285193:web:36d2dfb77de7e3684e8298", 
+            measurementId: "G-M18P0MG4G4" 
+        }; 
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const ADMIN_SECRET = "Sanya0811";
+        let isLoginMode = true;
+
+        // Check if already logged in
+        onAuthStateChanged(auth, (user) => {
+            if (user) window.location.href = 'dashboard.html';
+        });
+
+        function toggleMode() {
+            isLoginMode = !isLoginMode;
+            const title = document.getElementById('form-title');
+            const loginFields = document.getElementById('login-fields');
+            const regFields = document.getElementById('register-fields');
+            const toggleBtn = document.getElementById('toggle-mode');
+            const error = document.getElementById('error');
+
+            error.style.display = 'none';
+            if (isLoginMode) {
+                title.textContent = 'Авторизация';
+                loginFields.style.display = 'block';
+                regFields.style.display = 'none';
+                toggleBtn.textContent = 'Создать аккаунт';
+            } else {
+                title.textContent = 'Регистрация';
+                loginFields.style.display = 'none';
+                regFields.style.display = 'block';
+                toggleBtn.textContent = 'Уже есть аккаунт? Войти';
+            }
+        }
+
+        async function doLogin() {
+            const email = document.getElementById('user').value.trim();
+            const pass = document.getElementById('pass').value.trim();
+            const btn = document.getElementById('login-btn');
+            const error = document.getElementById('error');
+
+            if (!email || !pass) {
+                showError("ЗАПОЛНИТЕ ВСЕ ПОЛЯ");
+                return;
+            }
+
+            // Client-side Email Validation
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                showError("НЕКОРРЕКТНЫЙ ФОРМАТ EMAIL");
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ПРОВЕРКА...';
+            error.style.display = 'none';
+
+            try {
+                await signInWithEmailAndPassword(auth, email, pass);
+                window.location.href = 'dashboard.html';
+            } catch (e) {
+                console.error("Login Error:", e);
+                let msg = "ОШИБКА АВТОРИЗАЦИИ";
+                if (e.code === 'auth/invalid-credential') {
+                    msg = "НЕВЕРНЫЙ ПАРОЛЬ ИЛИ EMAIL";
+                } else if (e.code === 'auth/user-not-found') {
+                    msg = "ПОЛЬЗОВАТЕЛЬ НЕ НАЙДЕН. ЗАРЕГИСТРИРУЙТЕСЬ.";
+                } else if (e.code === 'auth/too-many-requests') {
+                    msg = "СЛИШКОМ МНОГО ПОПЫТОК. ПОПРОБУЙТЕ ПОЗЖЕ.";
+                } else {
+                    msg = `ОШИБКА: ${e.message}`;
+                }
+                showError(msg);
+                btn.disabled = false;
+                btn.textContent = 'ВЫПОЛНИТЬ ВХОД';
+            }
+        }
+
+        async function doRegister() {
+            const email = document.getElementById('reg-email').value.trim();
+            const username = document.getElementById('reg-user').value.trim();
+            const pass = document.getElementById('reg-pass').value.trim();
+            const confirm = document.getElementById('reg-confirm').value.trim();
+            const adminCode = document.getElementById('reg-admin-code').value.trim();
+            const btn = document.getElementById('reg-btn');
+            const error = document.getElementById('error');
+
+            if (!email || !username || !pass || !confirm || !adminCode) {
+                showError("ЗАПОЛНИТЕ ВСЕ ПОЛЯ");
+                return;
+            }
+
+            // Email Validation
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                showError("НЕКОРРЕКТНЫЙ ФОРМАТ EMAIL");
+                return;
+            }
+
+            // Password Complexity Validation (Min 8, Latin, Numbers, Special Symbols)
+            const passRegex = /^(?=.*[a-zA-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+            if (!passRegex.test(pass)) {
+                showError("ПАРОЛЬ ДОЛЖЕН БЫТЬ МИН. 8 СИМВОЛОВ, СОДЕРЖАТЬ ЛАТИНИЦУ, ЦИФРЫ И СПЕЦСИМВОЛЫ (@$!%*?&)");
+                return;
+            }
+
+            if (adminCode !== ADMIN_SECRET) {
+                showError("НЕВЕРНЫЙ КОД АДМИНИСТРАТОРА");
+                return;
+            }
+
+            if (pass !== confirm) {
+                showError("ПАРОЛИ НЕ СОВПАДАЮТ");
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> СОЗДАНИЕ...';
+            error.style.display = 'none';
+
+            try {
+                const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+                await updateProfile(userCredential.user, { displayName: username });
+                console.log("Registration and auto-login successful");
+                window.location.href = 'dashboard.html';
+            } catch (e) {
+                console.error("Registration Error:", e);
+                let msg = "ОШИБКА РЕГИСТРАЦИИ";
+                if (e.code === 'auth/email-already-in-use') {
+                    msg = "ЭТОТ EMAIL УЖЕ ЗАРЕГИСТРИРОВАН. ВОЙДИТЕ В АККАУНТ.";
+                    // Switch to login mode automatically
+                    setTimeout(() => toggleMode(), 2000);
+                } else if (e.code === 'auth/invalid-email') {
+                    msg = "НЕКОРРЕКТНЫЙ EMAIL АДРЕС";
+                } else if (e.code === 'auth/weak-password') {
+                    msg = "СЛИШКОМ СЛАБЫЙ ПАРОЛЬ";
+                } else {
+                    msg = `ОШИБКА: ${e.message}`;
+                }
+                showError(msg);
+                btn.disabled = false;
+                btn.textContent = 'ЗАРЕГИСТРИРОВАТЬСЯ';
+            }
+        }
+
+        function showError(msg) {
+            const error = document.getElementById('error');
+            error.textContent = msg;
+            error.style.display = 'block';
+        }
+
+        window.doLogin = doLogin;
+        window.doRegister = doRegister;
+        window.toggleMode = toggleMode;
+
+        // Enter key
+        document.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                if (isLoginMode) doLogin();
+                else doRegister();
+            }
+        });
+    </script>
+</body>
+</html>

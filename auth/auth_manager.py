@@ -6,6 +6,7 @@ import requests
 import json
 import os
 import logging
+import hashlib
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
@@ -23,205 +24,286 @@ class AuthManager:
         self.hwid = self.get_hwid()
         self.current_creds = None
         
-    def get_hwid(self):
-        """Generates a unique HWID based on system info."""
+    def get_hwid_map(self):
+        """Generates a map of hardware identifiers for fuzzy matching."""
+        hwid_map = {
+            "bios": "N/A",
+            "cpu": "N/A",
+            "disk": "N/A",
+            "mac": str(uuid.getnode())
+        }
+        
         try:
             if platform.system() == "Windows":
-                cmd = 'wmic csproduct get uuid'
-                uuid_str = subprocess.check_output(cmd).decode().split('\n')[1].strip()
-                return uuid_str
+                # BIOS UUID
+                try:
+                    cmd = 'wmic csproduct get uuid'
+                    output = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode()
+                    lines = [line.strip() for line in output.split('\n') if line.strip()]
+                    if len(lines) > 1 and lines[1] != "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF":
+                        hwid_map["bios"] = lines[1]
+                except: pass
+
+                # CPU ID
+                try:
+                    cmd = 'wmic cpu get processorid'
+                    output = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode()
+                    lines = [line.strip() for line in output.split('\n') if line.strip()]
+                    if len(lines) > 1:
+                        hwid_map["cpu"] = lines[1]
+                except: pass
+
+                # Disk Serial
+                try:
+                    cmd = 'wmic diskdrive get serialnumber'
+                    output = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode()
+                    lines = [line.strip() for line in output.split('\n') if line.strip()]
+                    if len(lines) > 1:
+                        hwid_map["disk"] = lines[1]
+                except: pass
+        except Exception as e:
+            logger.error(f"HWID map generation error: {e}")
+            
+        return hwid_map
+
+    def get_hwid(self):
+        """Returns a string representation of the HWID map for storage."""
+        h = self.get_hwid_map()
+        # Format: bios|cpu|disk|mac
+        return f"{h['bios']}|{h['cpu']}|{h['disk']}|{h['mac']}"
+
+    def compare_hwids(self, stored_hwid, current_hwid):
+        """
+        Compares two HWID strings and returns similarity score and details.
+        Returns (is_match, match_count, total_count)
+        """
+        if not stored_hwid or "|" not in stored_hwid:
+            return stored_hwid == current_hwid, 0, 0
+            
+        s_parts = stored_hwid.split('|')
+        c_parts = current_hwid.split('|')
+        
+        if len(s_parts) != len(c_parts):
+            return False, 0, len(c_parts)
+            
+        matches = 0
+        total = 0
+        details = []
+        labels = ["BIOS", "CPU", "Disk", "MAC"]
+        
+        for i in range(len(s_parts)):
+            if s_parts[i] != "N/A" and c_parts[i] != "N/A":
+                total += 1
+                if s_parts[i] == c_parts[i]:
+                    matches += 1
+                    details.append(f"{labels[i]}: OK")
+                else:
+                    details.append(f"{labels[i]}: CHANGED")
             else:
-                return str(uuid.getnode())
-        except Exception:
-            # Fallback to mac address if wmic fails
-            return str(uuid.getnode())
+                details.append(f"{labels[i]}: N/A")
+                
+        logger.info(f"HWID Check Details: {', '.join(details)} (Matches: {matches}/{total})")
+        
+        # Match if at least 2 components match (or 1 if total is 1)
+        is_match = matches >= 2 or (total <= 1 and matches == total)
+        return is_match, matches, total
 
     def validate_key(self, login, password, key):
-        """Validates key with Firebase."""
+        """Validates key with Firebase. Supports soft migration and re-bind."""
         logger.info(f"Auth: Starting validation for user '{login}' with key '{key[:5]}...'")
+        current_hwid = self.get_hwid()
+        
         try:
             # 1. Fetch Key Document
             doc_url = f"{self.base_url}/keys/{key}?key={self.api_key}"
-            logger.info(f"Auth: Sending request to Firestore: {doc_url}")
             response = requests.get(doc_url, timeout=10)
-            logger.info(f"Auth: Received response with status code {response.status_code}")
 
             if response.status_code == 404:
-                logger.warning("Auth: Key not found in Firestore (404).")
-                return False, "Неверный ключ лицензии. Проверьте правильность ввода.", None
+                return False, "Неверный ключ лицензии.", None
             
-            # Handle other client/server errors before grace period
             if response.status_code != 200:
-                logger.error(f"Auth: Firestore server returned an error. Status: {response.status_code}, Body: {response.text}")
-                # Try to parse a more specific error message from Firebase
-                try:
-                    error_msg = response.json().get("error", {}).get("message", "Неизвестная ошибка сервера")
-                except:
-                    error_msg = response.text
-                return False, f"Ошибка сервера: {error_msg}", None
+                return False, f"Ошибка сервера: {response.status_code}", None
 
             data = response.json()
-            logger.debug(f"Auth: Successfully parsed response JSON: {data}")
             fields = data.get("fields", {})
             
             # Helper to get field value safely
             def get_field(name, type_str="stringValue"):
                 return fields.get(name, {}).get(type_str)
 
-            # Check if active
             is_active = fields.get("is_active", {}).get("booleanValue", True)
             if not is_active:
-                 logger.warning(f"Auth: Key '{key[:5]}...' is marked as inactive.")
-                 return False, "Этот ключ был деактивирован администратором.", None
+                 return False, "Ключ деактивирован.", None
 
-            # Check Activation
             stored_hwid = get_field("hwid")
             stored_login = get_field("login")
             stored_password = get_field("password")
-            
-            if stored_hwid:
-                logger.info("Auth: Key is already activated. Verifying credentials.")
-                # Already activated
-                if stored_hwid != self.hwid:
-                    logger.warning(f"Auth: HWID mismatch. Stored: '{stored_hwid}', Current: '{self.hwid}'")
-                    return False, "Ключ уже активирован на другом компьютере.", None
-                
-                if stored_login and (stored_login != login or stored_password != password):
-                    logger.warning("Auth: Login/Password mismatch for activated key.")
-                    return False, "Неверный логин или пароль для этого ключа.", None
-                
-                # Check Expiration
-                expires_at_str = get_field("expires_at")
-                logger.info(f"Auth: Validating expiration. Stored value: '{expires_at_str}'")
-                if expires_at_str and expires_at_str != "Lifetime":
-                    try:
-                        # Use timezone-unaware comparison
-                        expires_at = datetime.fromisoformat(expires_at_str.split('Z')[0])
-                        if datetime.now() > expires_at:
-                             logger.warning("Auth: License has expired.")
-                             return False, f"Срок действия лицензии истек {expires_at.strftime('%d.%m.%Y')}.", None
-                    except ValueError as e:
-                        logger.error(f"Auth: Could not parse expiration date '{expires_at_str}'. Error: {e}")
-                        pass # Ignore parsing errors, treat as valid if unparseable
-                
-                expires_display = expires_at_str if expires_at_str else "Lifetime"
+            rebind_count = int(fields.get("rebind_count", {}).get("integerValue", 0))
 
+            # 2. Activation / Re-bind Logic
+            if stored_hwid:
+                # Fuzzy matching
+                is_match, matches, total = self.compare_hwids(stored_hwid, current_hwid)
+                
+                if is_match:
+                    logger.info(f"Auth: HWID match found ({matches}/{total}).")
+                    if stored_login and (stored_login != login or stored_password != password):
+                        return False, "Неверный логин или пароль.", None
+                    
+                    # If hardware changed slightly but still matches, update it silently
+                    if current_hwid != stored_hwid:
+                        logger.info("Auth: Minor hardware change detected. Updating HWID record.")
+                        self._perform_rebind(key, login, password, rebind_count, current_hwid)
+                else:
+                    # Different PC or major hardware change
+                    logger.warning(f"Auth: HWID mismatch. Stored: {stored_hwid}, Current: {current_hwid}")
+                    
+                    # If it's the same login/pass, allow re-bind automatically (NO 24h delay)
+                    if stored_login == login and stored_password == password:
+                        logger.info("Auth: HWID changed significantly but credentials match. Performing automatic re-bind.")
+                        self._perform_rebind(key, login, password, rebind_count + 1, current_hwid)
+                    else:
+                        return False, "Ключ активирован на другом ПК. Для переноса введите верные логин/пароль.", None
             else:
                 # First Activation
-                logger.info(f"Auth: This is the first activation for key '{key[:5]}...'.")
-                duration_days_str = fields.get("duration_days", {}).get("integerValue") or fields.get("duration_days", {}).get("stringValue", "7")
-                try:
-                    duration_days = int(duration_days_str)
-                except (ValueError, TypeError):
-                    logger.warning(f"Auth: Invalid duration_days format ('{duration_days_str}'). Defaulting to 7.")
-                    duration_days = 7
+                self._perform_activation(key, login, password, fields, current_hwid)
 
-                now = datetime.now()
-                expires_at = now + timedelta(days=duration_days)
-                expires_at_str = expires_at.isoformat() + "Z" # Use ISO 8601 format with Z
-                
-                logger.info(f"Auth: Activating key for {duration_days} days. Expires at: {expires_at_str}")
-                
-                # Update Document (Activate)
-                update_mask = "updateMask.fieldPaths=hwid&updateMask.fieldPaths=login&updateMask.fieldPaths=password&updateMask.fieldPaths=activated_at&updateMask.fieldPaths=expires_at"
-                patch_url = f"{self.base_url}/keys/{key}?key={self.api_key}&{update_mask}"
-                
-                patch_data = {
-                    "fields": {
-                        "hwid": {"stringValue": self.hwid},
-                        "login": {"stringValue": login},
-                        "password": {"stringValue": password},
-                        "activated_at": {"stringValue": now.isoformat() + "Z"},
-                        "expires_at": {"stringValue": expires_at_str}
-                    }
-                }
-                
-                logger.info("Auth: Sending PATCH request to activate key.")
-                patch_resp = requests.patch(patch_url, json=patch_data, timeout=10)
-                
-                if patch_resp.status_code != 200:
-                    logger.error(f"Auth: Activation failed! Status: {patch_resp.status_code}, Body: {patch_resp.text}")
-                    return False, f"Ошибка активации ключа: {patch_resp.text}", None
-                    
-                logger.info("Auth: Activation PATCH request successful.")
-                expires_display = expires_at_str
+            # 3. Expiration Check
+            expires_at_str = get_field("expires_at")
+            if expires_at_str and expires_at_str != "Lifetime":
+                expires_at = datetime.fromisoformat(expires_at_str.replace('Z', ''))
+                if datetime.now() > expires_at:
+                    return False, f"Лицензия истекла {expires_at.strftime('%d.%m.%Y')}.", None
 
-            # Success
-            logger.info("Auth: Validation successful.")
             self.save_session(login, password, key)
-            self.current_creds = {
-                "login": login, 
-                "password": password, 
-                "key": key,
-                "expires_at": expires_display
-            }
-            return True, "Успешная авторизация", expires_display
+            return True, "Успешная авторизация", expires_at_str or "Lifetime"
                 
-        except requests.exceptions.RequestException as e:
-             logger.warning(f"Auth: Network request failed: {e}. Checking grace period.")
-             return self.check_grace_period(login, password, key)
         except Exception as e:
-            logger.error(f"Auth: An unexpected error occurred during validation: {e}", exc_info=True)
-            return False, f"Критическая ошибка: {str(e)}", None
+            logger.error(f"Auth error: {e}", exc_info=True)
+            return self.check_grace_period(login, password, key)
 
-    def check_license_status(self):
-        """Re-validates the current license."""
-        if not self.current_creds:
-            session = self.load_session()
-            if session:
-                self.current_creds = session
-            else:
-                return False, "No active session", None
+    def _perform_rebind(self, key, login, password, new_count, new_hwid=None):
+        """Updates HWID and re-bind metadata."""
+        hwid_to_save = new_hwid or self.hwid
+        update_mask = "updateMask.fieldPaths=hwid&updateMask.fieldPaths=last_rebind_at&updateMask.fieldPaths=rebind_count"
+        url = f"{self.base_url}/keys/{key}?key={self.api_key}&{update_mask}"
+        now_str = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        
+        patch_data = {
+            "fields": {
+                "hwid": {"stringValue": hwid_to_save},
+                "last_rebind_at": {"stringValue": now_str},
+                "rebind_count": {"integerValue": new_count}
+            }
+        }
+        requests.patch(url, json=patch_data, timeout=10)
 
-        return self.validate_key(
-            self.current_creds.get("login"),
-            self.current_creds.get("password"),
-            self.current_creds.get("key")
-        )
+    def _perform_activation(self, key, login, password, fields, initial_hwid=None):
+        """Initial activation logic."""
+        hwid_to_save = initial_hwid or self.hwid
+        duration_days = int(fields.get("duration_days", {}).get("integerValue") or fields.get("duration_days", {}).get("stringValue", "7"))
+        now = datetime.now()
+        expires_at = now + timedelta(days=duration_days)
+        expires_str = expires_at.isoformat() + "Z"
+        
+        update_mask = "updateMask.fieldPaths=hwid&updateMask.fieldPaths=login&updateMask.fieldPaths=password&updateMask.fieldPaths=activated_at&updateMask.fieldPaths=expires_at"
+        url = f"{self.base_url}/keys/{key}?key={self.api_key}&{update_mask}"
+        
+        patch_data = {
+            "fields": {
+                "hwid": {"stringValue": hwid_to_save},
+                "login": {"stringValue": login},
+                "password": {"stringValue": password},
+                "activated_at": {"stringValue": now.isoformat() + "Z"},
+                "expires_at": {"stringValue": expires_str}
+            }
+        }
+        requests.patch(url, json=patch_data, timeout=10)
 
     def check_grace_period(self, login, password, key):
-        """Allows login if offline but within 72 hours of last successful login."""
+        """Allows login if offline but within 24 hours of last successful login."""
         session = self.load_session()
-        if not session:
-             return False, "Нет связи с сервером (Firebase) и нет сохраненной сессии", None
+        if not session or session.get("key") != key:
+             return False, "Требуется подключение к интернету.", None
              
-        # Check if creds match saved session
-        if session.get("key") != key or session.get("login") != login or session.get("password") != password:
-            return False, "Нет связи с сервером (данные не совпадают с сохраненными)", None
-            
         last_login_str = session.get("last_login")
         if last_login_str:
-            try:
-                last_login = datetime.fromisoformat(last_login_str)
-                # Grace period extended to 72 hours
-                if (datetime.now() - last_login).total_seconds() < 72 * 3600:
-                    return True, "Офлайн режим (Grace Period)", "Offline (72h)"
-            except:
-                pass
+            last_login = datetime.fromisoformat(last_login_str)
+            if datetime.now() - last_login < timedelta(hours=24):
+                return True, "Офлайн режим (24ч)", "Offline"
         
-        return False, "Срок офлайн доступа (72ч) истек. Подключитесь к интернету.", None
+        return False, "Срок офлайн доступа истек.", None
+
+    def check_license_status(self):
+        """Lightweight check using stored session credentials."""
+        session = self.load_session()
+        if not session:
+            return False, "Сессия не найдена.", None
+            
+        login = session.get("login")
+        password = session.get("password")
+        key = session.get("key")
+        
+        if not all([login, password, key]):
+            return False, "Неполные данные сессии.", None
+            
+        return self.validate_key(login, password, key)
 
     def save_session(self, login, password, key):
-        """Saves successful login to auto-fill next time."""
+        """Saves successful login to auto-fill next time with atomic write and retries."""
         data = {
             "login": login,
             "password": password,
             "key": key,
             "last_login": datetime.now().isoformat()
         }
-        try:
-            os.makedirs(os.path.dirname(self.session_file), exist_ok=True)
-            with open(self.session_file, 'w') as f:
-                json.dump(data, f)
-        except:
-            pass
+        
+        temp_file = self.session_file + ".tmp"
+        max_retries = 5
+        
+        for attempt in range(max_retries):
+            try:
+                os.makedirs(os.path.dirname(self.session_file), exist_ok=True)
+                
+                # Atomic write strategy
+                with open(temp_file, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False, indent=4)
+                
+                # Replace is atomic on Windows for existing files
+                if os.path.exists(self.session_file):
+                    os.replace(temp_file, self.session_file)
+                else:
+                    os.rename(temp_file, self.session_file)
+                
+                logger.info(f"Auth: Session saved successfully to {self.session_file}")
+                return True
+            except (IOError, PermissionError) as e:
+                logger.warning(f"Auth: Save session attempt {attempt+1} failed: {e}")
+                time.sleep(0.2) # Wait for file to be released
+            except Exception as e:
+                logger.error(f"Auth: Unexpected error saving session: {e}")
+                break
+        return False
 
     def load_session(self):
-        """Loads last session data."""
-        if os.path.exists(self.session_file):
+        """Loads last session data with robust error handling."""
+        if not os.path.exists(self.session_file):
+            return None
+            
+        max_retries = 3
+        for attempt in range(max_retries):
             try:
-                with open(self.session_file, 'r') as f:
+                with open(self.session_file, 'r', encoding='utf-8') as f:
                     return json.load(f)
-            except:
-                pass
+            except (IOError, PermissionError) as e:
+                logger.warning(f"Auth: Load session attempt {attempt+1} failed: {e}")
+                time.sleep(0.1)
+            except json.JSONDecodeError:
+                logger.error("Auth: Session file is corrupted. Deleting.")
+                try: os.remove(self.session_file)
+                except: pass
+                return None
+            except Exception as e:
+                logger.error(f"Auth: Error loading session: {e}")
+                break
         return None

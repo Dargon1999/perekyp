@@ -9,7 +9,7 @@ import random
 import traceback
 import re
 from PyQt6.QtCore import Qt, QTimer, QSize, QRect, QPoint, pyqtSignal, QPropertyAnimation, QEasingCurve, QParallelAnimationGroup
-from PyQt6.QtGui import QColor, QPainter, QAction, QKeySequence, QIcon, QFontMetrics, QBrush, QPen, QMouseEvent
+from PyQt6.QtGui import QColor, QPainter, QAction, QKeySequence, QIcon, QFontMetrics, QBrush, QPen, QMouseEvent, QFont
 from gui.styles import StyleManager
 from gui.tabs.generic_tab import GenericTab
 from gui.widgets.calculator_widget import CalculatorWidget
@@ -153,12 +153,14 @@ class ComparisonOverlay(QDialog):
         
         # Table
         self.table = QTableWidget()
+        self.table.setFont(QFont("Segoe UI", 12))
         self.table.setColumnCount(len(self.items) + 1)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self.table.setShowGrid(False)
         self.table.horizontalHeader().setVisible(False)
         self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
         self.table.setStyleSheet(f"""
             QTableWidget {{
                 background-color: transparent;
@@ -573,6 +575,16 @@ class FishingFinancialWidget(GenericTab):
         self.stat_balance.title_label.setText("Общий баланс")
 
     def refresh_data(self):
+        # Ensure transactions are sorted newest first
+        transactions = self.data_manager.get_transactions(self.category)
+        try:
+            transactions.sort(
+                key=lambda x: (datetime.strptime(x.get("date", "01.01.2000"), "%d.%m.%Y"), x.get("timestamp", 0)), 
+                reverse=True
+            )
+        except:
+            pass
+            
         super().refresh_data()
         t = StyleManager.get_theme(self.current_theme)
         if hasattr(self, 'stat_profit') and self.stat_profit.value_label:
@@ -666,6 +678,14 @@ class FishingProfitCalculatorDialog(QDialog):
         self.resource_costs.valueChanged.connect(self.calculate)
         form.addWidget(self.resource_costs, 4, 1)
         
+        # 6. Ad Cost
+        form.addWidget(QLabel("Стоимость объявления ($):"), 5, 0)
+        self.ad_cost = QDoubleSpinBox()
+        self.ad_cost.setRange(0, 100000)
+        self.ad_cost.setValue(0.0)
+        self.ad_cost.valueChanged.connect(self.calculate)
+        form.addWidget(self.ad_cost, 5, 1)
+        
         layout.addLayout(form)
         
         # Result
@@ -693,18 +713,33 @@ class FishingProfitCalculatorDialog(QDialog):
     def calculate(self):
         revenue = self.price_per_kg.value() * self.volume.value()
         costs = self.transport_costs.value() + self.resource_costs.value()
-        profit = revenue - costs
+        # Ad cost is subtracted from revenue to get current_profit
+        # but will be saved as separate operation too.
+        profit = revenue - costs - self.ad_cost.value()
         self.pure_profit_lbl.setText(f"Чистая прибыль: ${profit:,.2f}")
         self.current_profit = profit
 
     def save_to_history(self):
         if self.data_manager:
             item_name = self.fish_type.currentText()
+            # We add revenue as the main transaction, and ad_cost as the ad_cost parameter.
+            # DataManager will create a separate transaction for it.
+            revenue = self.price_per_kg.value() * self.volume.value()
+            costs = self.transport_costs.value() + self.resource_costs.value()
+            
+            # The main transaction amount should be the profit WITHOUT ad_cost, 
+            # so that when ad_cost is subtracted as a separate transaction, 
+            # the total profit is correct.
+            # Wait, if I save revenue-costs as the main amount, and ad_cost separately, 
+            # total will be revenue-costs-ad_cost.
+            main_amount = revenue - costs
+            
             self.data_manager.add_transaction(
                 "fishing", 
-                self.current_profit, 
+                main_amount, 
                 f"Расчёт прибыли: {item_name} ({self.volume.value()}кг)", 
-                item_name=item_name
+                item_name=item_name,
+                ad_cost=self.ad_cost.value()
             )
         self.accept()
 

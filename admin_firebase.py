@@ -48,6 +48,8 @@ def generate_key():
                 "duration_days": {"integerValue": days},
                 "is_active": {"booleanValue": True},
                 "hwid": {"nullValue": None}, # Empty initially
+                "rebind_count": {"integerValue": 0},
+                "last_rebind_at": {"nullValue": None},
                 "created_at": {"timestampValue": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")}
             }
         }
@@ -182,8 +184,8 @@ def list_keys():
     documents = data.get("documents", [])
     
     print(f"\nВсего ключей: {len(documents)}")
-    print(f"{'КЛЮЧ':<25} | {'СТАТУС':<8} | {'Срок / Истекает':<20} | {'HWID':<30} | {'LOGIN'}")
-    print("-" * 100)
+    print(f"{'КЛЮЧ':<25} | {'СТАТУС':<8} | {'Срок / Истекает':<20} | {'LOGIN':<15} | {'HWID'}")
+    print("-" * 120)
     
     for doc in documents:
         # doc["name"] looks like "projects/.../databases/(default)/documents/keys/KEY-VALUE"
@@ -203,7 +205,9 @@ def list_keys():
                 time_info = "Навсегда"
             else:
                 try:
-                    dt = datetime.datetime.fromisoformat(expires_at)
+                    # Handle Z suffix if present
+                    dt_str = expires_at.replace('Z', '')
+                    dt = datetime.datetime.fromisoformat(dt_str)
                     time_info = dt.strftime("%d.%m.%Y")
                 except:
                     time_info = expires_at
@@ -213,7 +217,7 @@ def list_keys():
             time_info = "?"
             
         status = "АКТИВЕН" if is_active else "БАН"
-        print(f"{key_val:<25} | {status:<8} | {time_info:<20} | {hwid:<30} | {login}")
+        print(f"{key_val:<25} | {status:<8} | {time_info:<20} | {login:<15} | {hwid}")
 
 def reset_key():
     print("\n--- СБРОС КЛЮЧА (ОБНУЛЕНИЕ HWID И ДАТЫ АКТИВАЦИИ) ---")
@@ -238,13 +242,15 @@ def reset_key():
     if confirm.lower() != 'y': return
 
     # Update HWID, login, expires_at to reset state
-    url = f"{BASE_URL}/keys/{key}?key={API_KEY}&updateMask.fieldPaths=hwid&updateMask.fieldPaths=login&updateMask.fieldPaths=expires_at&updateMask.fieldPaths=is_active"
+    url = f"{BASE_URL}/keys/{key}?key={API_KEY}&updateMask.fieldPaths=hwid&updateMask.fieldPaths=login&updateMask.fieldPaths=expires_at&updateMask.fieldPaths=is_active&updateMask.fieldPaths=rebind_count&updateMask.fieldPaths=last_rebind_at"
     
     data = {
         "fields": {
             "hwid": {"nullValue": None},
             "login": {"nullValue": None},
             "expires_at": {"nullValue": None},
+            "rebind_count": {"integerValue": 0},
+            "last_rebind_at": {"nullValue": None},
             "is_active": {"booleanValue": True} # Ensure it's unbanned
         }
     }

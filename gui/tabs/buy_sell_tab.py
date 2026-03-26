@@ -685,6 +685,7 @@ class TradeItemWidget(QWidget):
             if child.widget(): child.widget().deleteLater()
             
         items = self.data_manager.get_trade_sold(self.category_key)
+        show_coa = self.data_manager.get_setting("showCostOfAppearance", False)
         
         row, col = 0, 0
         cols = 3 # 3 columns grid
@@ -760,9 +761,8 @@ class TradeItemWidget(QWidget):
             info_layout.addWidget(name_lbl)
             
             profit = int(float(item.get("sell_price", 0)) - float(item.get("buy_price", 0)))
-            show_coa = self.data_manager.get_setting("showCostOfAppearance", False)
-            if show_coa:
-                profit -= int(float(item.get("cost_of_appearance", 0)))
+            # Always subtract cost of appearance from profit if present
+            profit -= int(float(item.get("cost_of_appearance", 0)))
                 
             color = "#2ecc71" if profit >= 0 else "#e74c3c"
             

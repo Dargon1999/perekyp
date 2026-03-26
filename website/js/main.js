@@ -1,28 +1,94 @@
 (function() {
     'use strict';
 
+    let config = null; // Global within IIFE
+
     // 1. Initial State & Elements
     const init = async () => {
-        const config = await loadConfig();
-        if (config) {
-            populateContent(config);
-            initBgCanvas();
-            initSoundEffects();
+        console.log('System: Starting initialization...');
+        try {
+            config = await loadConfig();
+            console.log('System: Config loaded');
+            if (config) {
+                populateContent(config);
+                initBgCanvas();
+                initSoundEffects();
+            }
+        } catch (e) {
+            console.error('System: Initialization error:', e);
+        } finally {
+            console.log('System: Finalizing setup...');
+            setupEventListeners();
+            revealOnScroll();
+            hidePreloader();
         }
-        setupEventListeners();
-        revealOnScroll();
     };
 
-    // 2. Load config.json
+    const hidePreloader = () => {
+        const preloader = document.getElementById('preloader');
+        if (preloader) {
+            preloader.style.opacity = '0';
+            setTimeout(() => {
+                preloader.style.display = 'none';
+                document.body.classList.remove('loading');
+                initFullscreenViewer(); // Initialize viewer after preloader
+            }, 800);
+        }
+    };
+
+    // 2. Fullscreen Viewer
+    const initFullscreenViewer = () => {
+        const overlay = document.getElementById('fullscreen-overlay');
+        const fsImg = document.getElementById('fullscreen-img');
+        const close = document.querySelector('.close-overlay');
+        
+        if (!overlay || !fsImg) return;
+
+        const openViewer = (src) => {
+            fsImg.src = src;
+            overlay.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        };
+
+        const closeViewer = () => {
+            overlay.classList.remove('active');
+            document.body.style.overflow = '';
+        };
+
+        // Attach to all images on click
+        document.body.addEventListener('click', (e) => {
+            if (e.target.tagName === 'IMG' && (e.target.closest('.screenshot-item') || e.target.closest('.media-item') || e.target.id === 'hero-img')) {
+                openViewer(e.target.src);
+            }
+        });
+
+        close.addEventListener('click', closeViewer);
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) closeViewer();
+        });
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeViewer();
+        });
+    };
+
+    // 2. Load config.json with Timeout
     const loadConfig = async () => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 sec timeout
+
         try {
             if (window.location.protocol === 'file:') {
                 return getFallbackConfig();
             }
-            const response = await fetch('config.json');
+            
+            const response = await fetch('/config.json', { signal: controller.signal });
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             return await response.json();
         } catch (error) {
-            console.error('Error loading config, using fallback:', error);
+            clearTimeout(timeoutId);
+            console.warn('Config fetch failed or timed out, using fallback:', error.name === 'AbortError' ? 'Timeout' : error.message);
             return getFallbackConfig();
         }
     };
@@ -30,7 +96,7 @@
     const getFallbackConfig = () => {
         return {
             "app_name": "MoneyTracker Pro",
-            "version": "9.3.0",
+            "version": "1.0.0",
             "file_size": "45.2 MB",
             "description": "Профессиональное решение для автоматизации учета финансов, управления активами и контроля времени на базе Ledger-архитектуры.",
             "why_us": [
@@ -61,55 +127,99 @@
 
     // 3. Populate Content
     const populateContent = (config) => {
-        document.querySelectorAll('.app-version').forEach(el => el.textContent = config.version);
-        document.getElementById('app-description').textContent = config.description;
-        document.getElementById('app-size').textContent = config.file_size;
+        try {
+            document.querySelectorAll('.app-version').forEach(el => {
+                el.textContent = config.version || '1.0.0';
+            });
+            
+            const descEl = document.getElementById('app-description');
+            if (descEl) descEl.textContent = config.description;
+            
+            const sizeEl = document.getElementById('app-size');
+            if (sizeEl) sizeEl.textContent = config.file_size;
 
-        const whyUsContainer = document.getElementById('why-us-container');
-        if (whyUsContainer) {
-            whyUsContainer.innerHTML = config.why_us.map(item => `
-                <div class="feature-card reveal-up">
-                    <i class="${item.icon}"></i>
-                    <h3>${item.title}</h3>
-                    <p>${item.desc}</p>
-                </div>
-            `).join('');
-        }
+            // Apply Dynamic Placements
+            const ts = new Date().getTime(); // Cache buster
+            if (config.placements) {
+                const heroImg = document.getElementById('hero-img');
+                if (heroImg && config.placements.hero) {
+                    heroImg.src = config.placements.hero.startsWith('/') ? `${config.placements.hero}?v=${ts}` : config.placements.hero;
+                    heroImg.onerror = () => {
+                        console.warn('Hero image failed to load, using default');
+                        heroImg.src = 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1200&q=80';
+                    };
+                }
+                
+                const downloadSection = document.getElementById('download');
+                if (downloadSection && config.placements.download) {
+                    const dlUrl = config.placements.download.startsWith('/') ? `${config.placements.download}?v=${ts}` : config.placements.download;
+                    downloadSection.style.backgroundImage = `linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)), url(${dlUrl})`;
+                    downloadSection.style.backgroundSize = 'cover';
+                    downloadSection.style.backgroundPosition = 'center';
+                }
+            }
 
-        const featuresContainer = document.getElementById('features-container');
-        if (featuresContainer) {
-            featuresContainer.innerHTML = config.features.map(cat => `
-                <div class="feature-category" style="grid-column: 1/-1; margin-top: 40px;">
-                    <h3>${cat.category}</h3>
-                </div>
-                ${cat.items.map(f => `
+            const whyUsContainer = document.getElementById('why-us-container');
+            if (whyUsContainer && config.why_us) {
+                whyUsContainer.innerHTML = config.why_us.map(item => `
                     <div class="feature-card reveal-up">
-                        <i class="${f.icon}"></i>
-                        <h3>${f.title}</h3>
-                        <p>${f.desc}</p>
+                        <i class="${item.icon}"></i>
+                        <h3>${item.title}</h3>
+                        <p>${item.desc}</p>
                     </div>
-                `).join('')}
-            `).join('');
-        }
+                `).join('');
+            }
 
-        const screenshotsContainer = document.getElementById('screenshots-container');
-        if (screenshotsContainer) {
-            screenshotsContainer.innerHTML = config.screenshots.map(s => `
-                <div class="screenshot-item reveal-up">
-                    <img src="${s.url}" alt="${s.title}">
-                </div>
-            `).join('');
-        }
+            const featuresContainer = document.getElementById('features-container');
+            if (featuresContainer && config.features) {
+                featuresContainer.innerHTML = config.features.map(cat => `
+                    <div class="feature-category" style="grid-column: 1/-1; margin-top: 40px;">
+                        <h3>${cat.category}</h3>
+                    </div>
+                    ${cat.items.map(f => `
+                        <div class="feature-card reveal-up">
+                            <i class="${f.icon}"></i>
+                            <h3>${f.title}</h3>
+                            <p>${f.desc}</p>
+                        </div>
+                    `).join('')}
+                `).join('');
+            }
 
-        document.getElementById('contact-discord').textContent = config.contacts.discord;
-        document.getElementById('contact-telegram').textContent = config.contacts.telegram;
-        document.getElementById('contact-email').textContent = config.contacts.email;
+            const screenshotsContainer = document.getElementById('screenshots-container');
+            if (screenshotsContainer && config.screenshots) {
+                screenshotsContainer.innerHTML = config.screenshots.map(s => {
+                    if (!s.url) return '';
+                    const url = s.url.startsWith('/') ? `${s.url}?v=${ts}` : s.url;
+                    return `
+                        <div class="screenshot-item reveal-up">
+                            <img src="${url}" alt="${s.title || 'Screenshot'}" onerror="this.parentElement.style.display='none'">
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            const discordEl = document.getElementById('contact-discord');
+            if (discordEl && config.contacts) discordEl.textContent = config.contacts.discord;
+            
+            const telegramEl = document.getElementById('contact-telegram');
+            if (telegramEl && config.contacts) telegramEl.textContent = config.contacts.telegram;
+            
+            const emailEl = document.getElementById('contact-email');
+            if (emailEl && config.contacts) emailEl.textContent = config.contacts.email;
+        } catch (err) {
+            console.error('Error populating content:', err);
+        }
     };
 
     // 4. Background Canvas (Matrix/Cyber Effect)
     const initBgCanvas = () => {
         const canvas = document.getElementById('bg-canvas');
+        if (!canvas) return;
+        
         const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        
         let width, height, particles = [];
 
         const resize = () => {
@@ -191,7 +301,7 @@
         // Mobile Menu
         const menuToggle = document.getElementById('mobile-menu');
         const navLinks = document.querySelector('.nav-links');
-        if (menuToggle) {
+        if (menuToggle && navLinks) {
             menuToggle.addEventListener('click', () => {
                 navLinks.style.display = navLinks.style.display === 'flex' ? 'none' : 'flex';
                 navLinks.style.flexDirection = 'column';
@@ -214,50 +324,91 @@
 
         // Admin Modal (Keep for compatibility if triggers exist)
         const openModal = () => window.location.href = 'admin.html';
-        const closeModal = () => document.getElementById('admin-modal').style.display = 'none';
+        const closeModal = () => {
+            const modal = document.getElementById('admin-modal');
+            if (modal) modal.style.display = 'none';
+        };
         
-        document.getElementById('logo-admin-trigger').addEventListener('click', openModal);
-        document.getElementById('footer-admin-trigger').addEventListener('click', openModal);
-        document.getElementById('close-admin').addEventListener('click', closeModal);
+        const logoTrigger = document.getElementById('logo-admin-trigger');
+        if (logoTrigger) logoTrigger.addEventListener('click', openModal);
+        
+        const footerTrigger = document.getElementById('footer-admin-trigger');
+        if (footerTrigger) footerTrigger.addEventListener('click', openModal);
+        
+        const closeBtn = document.getElementById('close-admin');
+        if (closeBtn) closeBtn.addEventListener('click', closeModal);
 
         // Download Logic
         const dlBtn = document.getElementById('download-btn');
         if (dlBtn) {
+            // Apply text from config
+            if (config && config.download_text) {
+                dlBtn.innerHTML = `<span>${config.download_text}</span>`;
+            }
+
             dlBtn.addEventListener('click', () => {
-                dlBtn.style.display = 'none';
                 const container = document.getElementById('download-progress-container');
                 const fill = document.getElementById('download-progress-fill');
                 const status = document.getElementById('download-status');
-                container.style.display = 'block';
-                
-                let progress = 0;
-                const interval = setInterval(() => {
-                    progress += Math.random() * 5;
-                    if (progress >= 100) {
-                        progress = 100;
-                        clearInterval(interval);
-                        status.textContent = 'ГОТОВО! ЗАГРУЗКА...';
-                        setTimeout(() => window.location.href = '#', 1000);
-                    }
-                    fill.style.width = progress + '%';
-                    status.textContent = `ЗАГРУЗКА ДАННЫХ: ${Math.round(progress)}%`;
-                }, 100);
+                if (container && fill && status) {
+                    dlBtn.style.display = 'none';
+                    container.style.display = 'block';
+                    
+                    let progress = 0;
+                    const interval = setInterval(() => {
+                        progress += Math.random() * 8;
+                        if (progress >= 100) {
+                            progress = 100;
+                            clearInterval(interval);
+                            status.textContent = 'ГОТОВО! НАЧИНАЕМ ЗАГРУЗКУ...';
+                            
+                            // Trigger actual file download with cache buster
+                            const ts = new Date().getTime();
+                            const baseUrl = (config && config.download_url) ? config.download_url : '#';
+                            const downloadUrl = baseUrl.includes('?') ? `${baseUrl}&v=${ts}` : `${baseUrl}?v=${ts}`;
+                            
+                            const link = document.createElement('a');
+                            link.href = downloadUrl;
+                            // Ensure the original filename is used for the download
+                            const filename = baseUrl.split('/').pop().split('?')[0] || 'MoneyTracker.exe';
+                            link.download = filename;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+
+                            setTimeout(() => {
+                                container.style.display = 'none';
+                                dlBtn.style.display = 'inline-flex';
+                                status.textContent = 'ПОДГОТОВКА...';
+                                fill.style.width = '0%';
+                                alert('СИСТЕМА: ЗАГРУЗКА ЗАВЕРШЕНА УСПЕШНО');
+                            }, 2000);
+                        }
+                        fill.style.width = progress + '%';
+                        status.textContent = `ЗАГРУЗКА ДАННЫХ: ${Math.round(progress)}%`;
+                    }, 80);
+                }
             });
         }
 
-        // Admin Login
-        document.getElementById('admin-login-btn').addEventListener('click', () => {
-            const user = document.getElementById('admin-user').value;
-            const pass = document.getElementById('admin-pass').value;
-            if (user === 'admin' && pass === 'admin123') {
-                localStorage.setItem('admin_logged_in', 'true');
-                window.location.href = 'dashboard.html';
-            } else {
-                const err = document.getElementById('admin-login-error');
-                err.textContent = 'ДОСТУП ЗАПРЕЩЕН: НЕВЕРНЫЙ КОД';
-                err.style.display = 'block';
-            }
-        });
+        // Admin Login (Legacy - if still used)
+        const adminLoginBtn = document.getElementById('admin-login-btn');
+        if (adminLoginBtn) {
+            adminLoginBtn.addEventListener('click', () => {
+                const user = document.getElementById('admin-user').value;
+                const pass = document.getElementById('admin-pass').value;
+                if (user === 'admin' && pass === 'admin123') {
+                    localStorage.setItem('admin_logged_in', 'true');
+                    window.location.href = 'dashboard.html';
+                } else {
+                    const err = document.getElementById('admin-login-error');
+                    if (err) {
+                        err.textContent = 'ДОСТУП ЗАПРЕЩЕН: НЕВЕРНЫЙ КОД';
+                        err.style.display = 'block';
+                    }
+                }
+            });
+        }
     };
 
     // 7. Reveal Animation

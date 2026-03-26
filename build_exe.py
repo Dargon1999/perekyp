@@ -1,57 +1,43 @@
 import PyInstaller.__main__
 import os
-import shutil
+import sys
 
-def build():
-    # Remove previous build artifacts but keep dist if needed for updater
-    if os.path.exists("build"):
-        shutil.rmtree("build")
-    # We don't delete dist here because updater.exe might be there
-    # Instead, we just ensure it exists
-    os.makedirs("dist", exist_ok=True)
+# Путь к основному файлу приложения
+main_script = "main.py"
 
-    # Define paths
-    entry_point = "main.py"
-    icon_path = "icon.ico" # Use the provided icon.ico file
-    
-    # Common data folders to include
-    # Format: (source, destination)
-    added_data = [
-        ("gui/assets", "gui/assets"),
-        ("data_manager.py", "."),
-        ("version.py", "."),
-        ("gui/styles.py", "gui"),
-        ("gui/tabs", "gui/tabs"),
-        ("gui/widgets", "gui/widgets"),
-        ("icon.ico", "."),
-        ("dist/updater.exe", "."),
-    ]
+# Название выходного файла
+app_name = "MoneyTracker"
 
-    # Construct PyInstaller arguments
-    args = [
-        entry_point,
-        "--onefile",
-        "--windowed",
-        "--name=MoneyTracker",
-        "--clean",
-        "--collect-all", "PyQt6",
-    ]
+# Сборка списка ресурсов (иконки, ассеты)
+# Формат: (путь_в_проекте, путь_в_exe)
+added_data = [
+    ("gui/assets", "gui/assets"),
+    ("data.json", "."),
+]
 
-    # Add icon if found
-    if os.path.exists(icon_path):
-        args.append(f"--icon={icon_path}")
-    elif os.path.exists("gui/assets/icons/car_rental.svg"):
-        # PyInstaller usually needs .ico for Windows, skipping for now if not .ico
-        pass
+# Иконка для EXE (если есть .ico файл)
+icon_file = "gui/assets/icons/app_icon.ico"
+icon_param = []
+if os.path.exists(icon_file):
+    icon_param = ["--icon", icon_file]
 
-    # Add data files
-    for src, dest in added_data:
-        if os.path.exists(src):
-            args.extend(["--add-data", f"{src};{dest}"])
+# Параметры PyInstaller
+params = [
+    main_script,
+    "--name", app_name,
+    "--onefile",              # Собрать в один EXE файл
+    "--noconsole",            # Не показывать консоль при запуске
+    "--clean",                # Очистить кэш перед сборкой
+]
 
-    print(f"Starting build with arguments: {' '.join(args)}")
-    PyInstaller.__main__.run(args)
-    print("\nBuild finished! Check the 'dist' folder for MoneyTracker.exe")
+# Добавляем данные
+for src, dest in added_data:
+    if os.path.exists(src):
+        params.extend(["--add-data", f"{src}{os.pathsep}{dest}"])
 
-if __name__ == "__main__":
-    build()
+# Добавляем иконку
+params.extend(icon_param)
+
+print(f"--- Starting build process for {app_name} ---")
+PyInstaller.__main__.run(params)
+print(f"--- Build finished! Check the 'dist' folder ---")

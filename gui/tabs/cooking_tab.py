@@ -25,7 +25,7 @@ class RecipeCard(QFrame):
         self.setMinimumWidth(280) # Reduced to fit 3 in row
         
         # Get Theme Colors
-        t = StyleManager.DARK_THEME
+        t = StyleManager.get_theme("dark")
         
         self.setStyleSheet(f"""
             #RecipeCard {{
@@ -48,7 +48,7 @@ class RecipeCard(QFrame):
             dlg.exec()
 
     def init_ui(self):
-        t = StyleManager.DARK_THEME
+        t = StyleManager.get_theme("dark")
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(15, 12, 15, 12) # Compact margins
@@ -183,7 +183,7 @@ class CookingTab(QWidget):
         QTimer.singleShot(0, self.recalculate_grid)
 
     def init_ui(self):
-        t = StyleManager.DARK_THEME
+        t = StyleManager.get_theme("dark")
         
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(10, 10, 10, 10) # Compact margins

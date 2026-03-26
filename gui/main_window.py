@@ -3,8 +3,8 @@ from PyQt6.QtWidgets import (
     QMessageBox, QFrame, QButtonGroup, QLabel, QApplication, QScrollArea,
     QSystemTrayIcon, QMenu
 )
-from PyQt6.QtCore import Qt, QTimer, QSize, QPropertyAnimation, QEasingCurve, QParallelAnimationGroup, QPoint
-from PyQt6.QtGui import QGuiApplication, QIcon, QAction, QCloseEvent, QShortcut, QKeySequence
+from PyQt6.QtCore import Qt, QTimer, QSize, QPropertyAnimation, QEasingCurve, QParallelAnimationGroup, QPoint, QThread, pyqtSignal, pyqtProperty
+from PyQt6.QtGui import QGuiApplication, QIcon, QAction, QCloseEvent, QShortcut, QKeySequence, QPainter, QColor, QBrush, QLinearGradient
 import os
 import logging
 import traceback
@@ -16,19 +16,6 @@ from gui.widgets.timeline_widget import TimelineWidget
 from utils import resource_path
 from gui.title_bar import CustomTitleBar
 from gui.custom_dialogs import StyledDialogBase, AlertDialog, UpdateConfirmDialog, UpdateProgressDialog
-from gui.tabs.generic_tab import GenericTab
-from gui.tabs.rent_car_tab import RentCarTab
-from gui.tabs.buy_sell_tab import BuySellTab
-from gui.tabs.settings_tab import SettingsTab
-from gui.tabs.mining_tab import MiningTab
-from gui.tabs.farm_bp_tab import FarmBPTab
-from gui.tabs.memo_tab import MemoTab
-from gui.tabs.helper_tab import HelperTab
-from gui.tabs.cooking_tab import CookingTab
-from gui.tabs.analytics_tab import AnalyticsTab
-from gui.tabs.capital_planning_tab import CapitalPlanningTab
-from gui.tabs.timers_tab import TimersTab
-from gui.tabs.fishing_tab import FishingTab
 from gui.styles import StyleManager
 from gui.animations import AnimationManager
 from gui.update_manager import UpdateManager
@@ -81,14 +68,30 @@ class NavButton(QPushButton):
                 self.setText(f"{self.icon_char}   {self.original_text}")
             self.setToolTip("")
 
+from gui.tabs.generic_tab import GenericTab
+from gui.tabs.buy_sell_tab import BuySellTab
+from gui.tabs.mining_tab import MiningTab
+from gui.tabs.farm_bp_tab import FarmBPTab
+from gui.tabs.memo_tab import MemoTab
+from gui.tabs.helper_tab import HelperTab
+from gui.tabs.cooking_tab import CookingTab
+from gui.tabs.analytics_tab import AnalyticsTab
+from gui.tabs.capital_planning_tab import CapitalPlanningTab
+from gui.tabs.timers_tab import TimersTab
+from gui.tabs.fishing_tab import FishingTab
+from gui.tabs.settings_tab import SettingsTab
+
+from async_data_manager import AsyncDataManager
+
 class MainWindow(QMainWindow):
     def __init__(self, auth_manager=None, data_manager=None):
         super().__init__()
         
-        # Сохраняем auth_manager для использования в проверке лицензии
         self.auth_manager = auth_manager
+        self._tabs_preloading_done = False
         
         self.data_manager = data_manager if data_manager else DataManager()
+        self.async_dm = AsyncDataManager(self.data_manager)
         self.db_manager = DatabaseManager()
         self.event_bus = EventBus.get_instance()
         self.plugin_manager = PluginManager(app_context={"db": self.db_manager, "data": self.data_manager, "event_bus": self.event_bus})
@@ -102,11 +105,9 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("MoneyTracker")
         
-        # Frameless Window
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         
-        # Set Window Icon explicitly
         icon_path = resource_path("icon_v2.ico")
         if not os.path.exists(icon_path):
             icon_path = resource_path("icon.ico")
@@ -215,15 +216,25 @@ class MainWindow(QMainWindow):
 
         self.main_layout.addWidget(self.content_area)
 
-        # Progressive Loading Setup
-        self.loading_label = QLabel("Загрузка интерфейса...", self.content_area)
-        self.loading_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.loading_label.setStyleSheet("font-size: 16px; color: #aaa;")
-        self.content_area_layout.addWidget(self.loading_label)
-        self.tabs.setVisible(False)
+        # Immediate initialization
+        self.setup_tabs()
+        self.apply_styles()
+        self.refresh_data()
+
+        # Check for updates and start heartbeat
+        self.update_manager.start_heartbeat(interval_ms=30000)
         
-        # Defer heavy initialization
-        QTimer.singleShot(50, self.post_init_setup)
+        # License Check
+        if self.auth_manager:
+            self.check_license_status()
+            self.license_timer = QTimer(self)
+            self.license_timer.timeout.connect(self.check_license_status)
+            self.license_timer.start(300000)
+
+        # Backup & Tray
+        self.data_manager.perform_scheduled_backup()
+        self.setup_tray_icon()
+        self.perf_monitor.end_startup()
 
         self.restore_window_geometry()
         self.setup_multi_monitor_support()
@@ -322,41 +333,35 @@ class MainWindow(QMainWindow):
         # We'll just set min for now to prevent distortion.
 
     def closeEvent(self, event: QCloseEvent):
-        """Handle application close event."""
-        # 0. Save geometry
+        logging.info("Application closing...")
+        
         geo = self.saveGeometry().toHex().data().decode()
         self.data_manager.set_setting("window_geometry", geo)
         
-        # Save current screen index
         screens = QGuiApplication.screens()
         try:
             current_index = screens.index(self.screen())
             self.data_manager.set_setting("last_screen_index", current_index)
-        except: pass
+        except Exception as e:
+            logging.warning(f"Could not save screen index: {e}")
 
-        # 1. Hide and cleanup Tray Icon
         if hasattr(self, 'tray_icon') and self.tray_icon:
             self.tray_icon.hide()
             self.tray_icon.deleteLater()
 
-        # 2. Stop License Timer
-        if hasattr(self, 'license_timer') and self.license_timer.isActive():
+        if hasattr(self, 'license_timer') and self.license_timer and self.license_timer.isActive():
             self.license_timer.stop()
 
-        # 3. Stop Update Manager (Heartbeat & Downloads)
         if self.update_manager:
             self.update_manager.stop()
 
-        # 4. Stop Timers Tab (internal timers if loaded)
         for i in range(self.tabs.count()):
             widget = self.tabs.widget(i)
-            if hasattr(widget, "stop"): # TimersTab has stop()
+            if widget and hasattr(widget, "stop"):
                 widget.stop()
 
-        super().closeEvent(event)
-
-        # 5. Force application quit to kill any lingering threads
-        QApplication.quit()
+        logging.info("Cleanup complete, accepting close event")
+        event.accept()
 
     def setup_tray_icon(self):
         self.tray_icon = QSystemTrayIcon(self)
@@ -395,7 +400,9 @@ class MainWindow(QMainWindow):
         self.is_sidebar_collapsed = not self.is_sidebar_collapsed
         target_width = self.sidebar_collapsed_width if self.is_sidebar_collapsed else self.sidebar_width
         
-        # Animate Width
+        if hasattr(self, 'anim_group') and self.anim_group and self.anim_group.state() == QParallelAnimationGroup.State.Running:
+            self.anim_group.stop()
+        
         self.anim_width = QPropertyAnimation(self.sidebar, b"minimumWidth")
         self.anim_width.setDuration(300)
         self.anim_width.setStartValue(self.sidebar.width())
@@ -413,180 +420,63 @@ class MainWindow(QMainWindow):
         self.anim_group.addAnimation(self.anim_width_max)
         self.anim_group.start()
         
-        # Update Buttons
         for btn in self.nav_group.buttons():
             if isinstance(btn, NavButton):
                 btn.update_display(self.is_sidebar_collapsed)
 
 
-    def post_init_setup(self):
-        """Deferred initialization of heavy UI components."""
-        import time
-        start_time = time.time()
-        try:
-            logging.info("Starting post-init setup...")
-            self.setup_tabs()
-            self.apply_styles()
-            self.refresh_data()
-            
-            # Switch to UI
-            self.tabs.setVisible(True)
-            if self.loading_label:
-                self.loading_label.deleteLater()
-                self.loading_label = None
-            
-            # Ensure icon is set on the window handle
-            icon_path = resource_path("icon_v2.ico")
-            if not os.path.exists(icon_path):
-                icon_path = resource_path("icon.ico")
-                
-            if os.path.exists(icon_path):
-                self.setWindowIcon(QIcon(icon_path))
-                # Also set it on the application instance again to be sure
-                QApplication.instance().setWindowIcon(QIcon(icon_path))
-            
-            # Check for updates and start heartbeat
-            self.update_manager.start_heartbeat(interval_ms=30000) # Check every 30 seconds
-            
-            # License Check Timer — запускаем только если auth_manager передан
-            if self.auth_manager:
-                self.check_license_status()  # Initial check
-                self.license_timer = QTimer(self)
-                self.license_timer.timeout.connect(self.check_license_status)
-                self.license_timer.start(300000)  # 5 minutes
-
-            # Perform scheduled backup check
-            self.data_manager.perform_scheduled_backup()
-
-            # Setup System Tray
-            self.setup_tray_icon()
-            
-            self.perf_monitor.end_startup()
-            end_time = time.time()
-            logging.info(f"Post-init setup completed in {end_time - start_time:.2f} seconds")
-            
-        except Exception as e:
-            error_msg = f"Critical error during interface loading:\n{str(e)}\n\n{traceback.format_exc()}"
-            print(error_msg) # Print to console
-            
-            # Show Error Dialog
-            try:
-                msg = QMessageBox(self)
-                msg.setIcon(QMessageBox.Icon.Critical)
-                msg.setWindowTitle("Ошибка запуска")
-                msg.setText("Не удалось загрузить интерфейс.")
-                msg.setInformativeText(str(e))
-                msg.setDetailedText(traceback.format_exc())
-                msg.exec()
-            except:
-                pass # Fallback if QMessageBox fails
-            
-            # Force quit to avoid zombie process
-            QApplication.quit()
-
     def setup_tabs(self):
-        """Setup lazy-loading tabs configuration."""
+        """Setup all tabs immediately."""
         self.tab_configs = [
-            (GenericTab, "Аренда авто", "car", "car_rental"),
-            (BuySellTab, "Покупка / Продажа", "tshirt", "clothes"),
-            (MiningTab, "Добыча", "hammer", "mining"),
-            (FarmBPTab, "Фарм BP", "leaf", "farm_bp"),
-            (MemoTab, "Блокнот", "sticky-note", "memo"),
-            (HelperTab, "Помощник", "magic", "helper"),
-            (CookingTab, "Кулинария", "utensils", "cooking"),
-            (AnalyticsTab, "Аналитика", "chart-bar", "analytics"),
-            (CapitalPlanningTab, "Капитал", "coins", "capital_planning"),
-            (TimersTab, "Таймер", "clock", "timers"),
-            (FishingTab, "Рыбалка", "fish", "fishing"),
-            (SettingsTab, "Настройки", "cog", "settings")
+            ("GenericTab", "Аренда авто", "car", "car_rental"),
+            ("BuySellTab", "Покупка / Продажа", "tshirt", "clothes"),
+            ("MiningTab", "Добыча", "hammer", "mining"),
+            ("FarmBPTab", "Фарм BP", "leaf", "farm_bp"),
+            ("MemoTab", "Блокнот", "sticky-note", "memo"),
+            ("HelperTab", "Помощник", "magic", "helper"),
+            ("CookingTab", "Кулинария", "utensils", "cooking"),
+            ("AnalyticsTab", "Аналитика", "chart-bar", "analytics"),
+            ("CapitalPlanningTab", "Капитал", "coins", "capital_planning"),
+            ("TimersTab", "Таймер", "clock", "timers"),
+            ("FishingTab", "Рыбалка", "fish", "fishing"),
+            ("SettingsTab", "Настройки", "cog", "settings")
         ]
         
-        # Create placeholders and navigation buttons
-        for i, (tab_class, name, icon_name, key) in enumerate(self.tab_configs):
-            # Add placeholder widget
-            placeholder = QWidget()
-            layout = QVBoxLayout(placeholder)
-            loading_lbl = QLabel("Загрузка...")
-            loading_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            loading_lbl.setStyleSheet("font-size: 16px; color: #aaa;")
-            layout.addWidget(loading_lbl)
-            self.tabs.addWidget(placeholder)
-            
-            # Add navigation button
+        self._tab_instances = {}
+        self._tabs_loaded = set()
+        
+        for i, (tab_class_name, name, icon_name, key) in enumerate(self.tab_configs):
             self.add_nav_btn(name, i, icon_name, key)
-            
-        # Initial visibility update
+        
         self.update_tabs_visibility()
         
-        # Load the startup tab from settings
         startup_key = self.data_manager.get_setting("startup_tab", "car_rental")
-        startup_index = 0 # Fallback
+        startup_index = 0
         for i, config in enumerate(self.tab_configs):
             if config[3] == startup_key:
                 startup_index = i
                 break
         
-        self.load_tab(startup_index)
         self.tabs.setCurrentIndex(startup_index)
+        self._load_tab(startup_index)
         
-        # Sync navigation buttons
+        # Preload adjacent tabs immediately after (for instant switching)
+        adjacent_indices = []
+        if startup_index > 0:
+            adjacent_indices.append(startup_index - 1)
+        if startup_index < len(self.tab_configs) - 1:
+            adjacent_indices.append(startup_index + 1)
+        
+        for idx in adjacent_indices:
+            QTimer.singleShot(100, lambda i=idx: self._load_tab(i))
+        
+        # Background preload of all remaining tabs
+        QTimer.singleShot(500, self._preload_all_tabs)
+        
         for btn in self.nav_group.buttons():
             if btn.property("page_index") == startup_index:
                 btn.setChecked(True)
                 break
-
-    def load_tab(self, index):
-        """Actually initializes a tab if it's not already loaded."""
-        if index < 0 or index >= len(self.tab_configs):
-            return None
-            
-        # Check if it's already a real tab (not a placeholder)
-        current_widget = self.tabs.widget(index)
-        # If it's a real tab class, it won't be a generic QWidget with a single QLabel
-        # Better check: if it's an instance of our specific tab classes
-        tab_class, name, icon_name, key = self.tab_configs[index]
-        
-        if isinstance(current_widget, tab_class):
-            return current_widget
-            
-        # Initialize the real tab
-        logging.info(f"Lazy-loading tab: {name} ({key}) at index {index}")
-        try:
-            import time
-            start_t = time.time()
-            
-            if tab_class == GenericTab:
-                tab = GenericTab(self.data_manager, key, self)
-            elif tab_class == SettingsTab:
-                tab = SettingsTab(self.data_manager, self.auth_manager, self)
-            elif tab_class == TimelineWidget:
-                tab = TimelineWidget(self)
-                # Store reference for event bus if needed
-                self.timeline = tab
-                self.event_bus.event_emitted.connect(self.timeline.add_event)
-            else:
-                tab = tab_class(self.data_manager, self)
-            
-            # Apply theme if needed
-            theme = self.data_manager.get_setting("theme", "dark")
-            if hasattr(tab, "apply_theme"):
-                tab.apply_theme(theme)
-                
-            # Replace placeholder
-            old_widget = self.tabs.widget(index)
-            self.tabs.removeWidget(old_widget)
-            self.tabs.insertWidget(index, tab)
-            old_widget.deleteLater()
-            
-            end_t = time.time()
-            logging.info(f"Successfully loaded tab {name} in {end_t - start_t:.3f}s")
-            return tab
-            
-        except Exception as e:
-            err = f"Failed to lazy-load tab {name} ({key}): {e}"
-            logging.error(f"{err}\n{traceback.format_exc()}")
-            return None
-
 
     def add_nav_btn(self, text, index, icon_name, key=None):
         icon_char = self.icon_map.get(icon_name, "?")
@@ -596,134 +486,125 @@ class MainWindow(QMainWindow):
         self.nav_buttons_layout.addWidget(btn)
         self.nav_group.addButton(btn, index)
 
+    def _load_tab(self, index):
+        if index in self._tabs_loaded:
+            return
+        
+        if index < 0 or index >= len(self.tab_configs):
+            return
+        
+        tab_class_name, name, icon_name, key = self.tab_configs[index]
+        try:
+            tab = None
+            if tab_class_name == "GenericTab":
+                tab = GenericTab(self.data_manager, key, self)
+            elif tab_class_name == "BuySellTab":
+                tab = BuySellTab(self.data_manager, self)
+            elif tab_class_name == "MiningTab":
+                tab = MiningTab(self.data_manager, self)
+            elif tab_class_name == "FarmBPTab":
+                tab = FarmBPTab(self.data_manager, self)
+            elif tab_class_name == "MemoTab":
+                tab = MemoTab(self.data_manager, self)
+            elif tab_class_name == "HelperTab":
+                tab = HelperTab(self.data_manager, self)
+            elif tab_class_name == "CookingTab":
+                tab = CookingTab(self.data_manager, self)
+            elif tab_class_name == "AnalyticsTab":
+                tab = AnalyticsTab(self.data_manager, self)
+            elif tab_class_name == "CapitalPlanningTab":
+                tab = CapitalPlanningTab(self.data_manager, self)
+            elif tab_class_name == "TimersTab":
+                tab = TimersTab(self.data_manager, self)
+            elif tab_class_name == "FishingTab":
+                tab = FishingTab(self.data_manager, self)
+            elif tab_class_name == "SettingsTab":
+                tab = SettingsTab(self.data_manager, self.auth_manager, self)
+
+            if tab:
+                tab.setObjectName("LoadedTab")
+                self.tabs.insertWidget(index, tab)
+                self._tab_instances[index] = tab
+                self._tabs_loaded.add(index)
+        except Exception as e:
+            logging.error(f"Failed to load tab {name}: {e}\n{traceback.format_exc()}")
+
+    def _preload_all_tabs(self):
+        if self._tabs_preloading_done:
+            return
+        self._tabs_preloading_done = True
+        
+        for i in range(len(self.tab_configs)):
+            if i not in self._tabs_loaded:
+                self._load_tab(i)
+
     def update_tabs_visibility(self):
         hidden_tabs = self.data_manager.get_setting("hidden_tabs", [])
-        logging.info(f"Updating tabs visibility. Hidden tabs from settings: {hidden_tabs}")
-        
         for btn in self.nav_group.buttons():
             if not isinstance(btn, NavButton): continue
             key = btn.property("tab_key")
-            
-            # Settings tab is always visible
             if not key or key == "settings": 
                 btn.setVisible(True)
                 continue
-            
-            # Check if key is in hidden_tabs list
             visible = key not in hidden_tabs
             btn.setVisible(visible)
-            logging.debug(f"Tab '{key}' visibility set to {visible}")
-            
-            # If current tab is hidden, switch to default
-            if not visible and self.tabs.currentIndex() == btn.property("page_index"):
-                 logging.info(f"Current tab {key} is hidden, switching to default.")
-                 # Try to switch to settings
-                 settings_idx = next((i for i, c in enumerate(self.tab_configs) if c[3] == "settings"), 0)
-                 self.tabs.setCurrentIndex(settings_idx) 
 
     def on_nav_clicked(self, btn):
         index = self.nav_group.id(btn)
+        self._load_tab(index)
+        self.tabs.setCurrentIndex(index)
         
-        # Ensure tab is loaded
-        tab = self.load_tab(index)
-        if tab:
-            self.tabs.setCurrentIndex(index)
-            
-            # Refresh data for the tab
-            if hasattr(tab, "refresh_data"):
-                tab.refresh_data()
-        else:
-            # If load failed, maybe show error or stay on current
-            pass
+        current_widget = self.tabs.widget(index)
+        if current_widget and hasattr(current_widget, "refresh_data"):
+            current_widget.refresh_data()
 
     def open_ai_chat(self):
-        # AI Chat is removed as per requirement
         pass
 
     def check_license_status(self):
-        """Check license status and handle expiration."""
-        if not self.auth_manager:
-            return
-            
+        if not self.auth_manager: return
         try:
-            # Assuming check_license returns (bool, str) or similar
-            # If auth_manager.check_license() is a blocking network call, 
-            # it might be better to run it in a thread, but for now we keep it simple
-            # as it was called in __init__ in the original code.
             is_valid, message, expires = self.auth_manager.check_license_status()
-            
             if not is_valid:
                 self.license_timer.stop()
-                dialog = AlertDialog(self, "Лицензия истекла", 
-                                   f"Статус лицензии: {message}\nПриложение будет закрыто.")
-                dialog.exec()
+                AlertDialog(self, "Лицензия истекла", f"Статус: {message}\nПриложение будет закрыто.").exec()
                 QApplication.quit()
         except Exception as e:
-            print(f"Error checking license: {e}")
+            logging.error(f"Error checking license: {e}")
 
     def on_update_available(self, version_info):
-        """Handle update available signal."""
         try:
             dialog = UpdateConfirmDialog(self, version_info)
             if dialog.exec():
                 self.start_update(version_info)
         except Exception as e:
-            print(f"Error showing update dialog: {e}")
+            logging.error(f"Error showing update dialog: {e}")
 
     def start_update(self, version_info):
-        """Start the update download and installation."""
         try:
             progress_dialog = UpdateProgressDialog(self)
             progress_dialog.show()
-            
-            # Connect signals
-            # Note: We need to be careful not to connect multiple times if this is called repeatedly
-            # But normally update is done once.
-            try:
-                self.update_manager.update_progress.disconnect()
-                self.update_manager.update_finished.disconnect()
-                self.update_manager.update_error.disconnect()
-            except:
-                pass # Signals might not be connected yet
-                
             self.update_manager.update_progress.connect(progress_dialog.update_progress)
             self.update_manager.update_status.connect(progress_dialog.set_status)
             self.update_manager.update_finished.connect(progress_dialog.on_finished)
             self.update_manager.update_error.connect(progress_dialog.on_error)
-            
-            # Connect cancellation
             progress_dialog.rejected.connect(self.update_manager.cancel_download)
             
-            # Start download
             download_url = version_info.get('download_url')
-            
-            # Robust call with fallback
-            if hasattr(self.update_manager, 'download_and_install_update'):
-                self.update_manager.download_and_install_update(
-                    download_url,
-                    force_update=version_info.get('force_update', False),
-                    notes=version_info.get('notes'),
-                    signature=version_info.get('signature')
-                )
-            else:
-                print("Warning: download_and_install_update not found, using perform_update fallback")
-                info = {
-                    "download_url": download_url,
-                    "signature": version_info.get('signature'),
-                    "force_update": version_info.get('force_update', False),
-                    "notes": version_info.get('notes')
-                }
-                self.update_manager.perform_update(info)
-                
+            self.update_manager.download_and_install_update(
+                download_url,
+                force_update=version_info.get('force_update', False),
+                notes=version_info.get('notes'),
+                signature=version_info.get('signature')
+            )
         except Exception as e:
-            print(f"Error starting update: {e}")
+            logging.error(f"Error starting update: {e}")
             AlertDialog(self, "Ошибка обновления", f"Не удалось запустить обновление: {e}").exec()
             
     def apply_styles(self):
         theme = self.data_manager.get_setting("theme", "dark")
         self.setStyleSheet(StyleManager.get_qss(theme))
-        
-        # Propagate to tabs
+        self.title_bar.set_theme(theme) # Ensure title bar branding is applied
         for i in range(self.tabs.count()):
             widget = self.tabs.widget(i)
             if hasattr(widget, "apply_theme"):
@@ -736,7 +617,6 @@ class MainWindow(QMainWindow):
             self.refresh_data()
 
     def refresh_data(self):
-        # Update Profile Name in Title Bar
         profile = self.data_manager.get_active_profile()
         if profile:
             self.title_bar.active_profile_label.setText(profile["name"])
@@ -745,24 +625,31 @@ class MainWindow(QMainWindow):
             self.title_bar.active_profile_label.setText("Профиль не выбран")
             self.title_bar.active_profile_label.setVisible(True)
         
-        # Update Global Balance in Title Bar
+        if hasattr(self.data_manager.get_total_capital_balance, "cache_clear"):
+            self.data_manager.get_total_capital_balance.cache_clear()
+        
         self.update_balance_display()
         
-        # Refresh current tab
         current_widget = self.tabs.currentWidget()
         if hasattr(current_widget, "refresh_data"):
             current_widget.refresh_data()
         
-        # Propagate to all tabs if needed (for global balance update)
         for i in range(self.tabs.count()):
             widget = self.tabs.widget(i)
             if widget != current_widget and hasattr(widget, "update_realtime_goal"):
                 widget.update_realtime_goal()
 
     def update_balance_display(self):
-        """Updates the global balance label in the title bar."""
+        """Immediately updates the global balance label."""
+        result = self.data_manager.get_total_capital_balance()
+        self._on_balance_loaded(result)
+
+    def _on_balance_loaded(self, result):
         try:
-            balance = self.data_manager.get_current_balance()
-            self.title_bar.balance_label.setText(f"💳 ${int(balance):,}")
+            if isinstance(result, dict) and 'liquid_cash' in result:
+                balance = result['liquid_cash']
+                self.title_bar.balance_label.setText(f"💳 ${int(balance):,}".replace(',', ' '))
+            else:
+                logging.warning(f"Balance update result unexpected: {result}")
         except Exception as e:
-            logging.error(f"Error updating global balance display: {e}")
+            logging.error(f"Error processing balance: {e}")

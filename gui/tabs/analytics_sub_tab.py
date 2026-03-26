@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog, QMessageBox
 )
 from PyQt6.QtCore import Qt, QDate
-from PyQt6.QtGui import QColor
+from PyQt6.QtGui import QColor, QFont
 import matplotlib
 matplotlib.use('QtAgg')
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
@@ -108,8 +108,10 @@ class AnalyticsSubTab(QWidget):
         self.content_layout.addWidget(self.table_label)
         
         self.table = QTableWidget()
+        self.table.setFont(QFont("Segoe UI", 12))
         self.table.setColumnCount(4)
         self.table.setHorizontalHeaderLabels(["Дата", "Описание", "Сумма", "Тип"])
+        self.table.horizontalHeader().setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.setMinimumHeight(200)
         self.content_layout.addWidget(self.table)
@@ -176,6 +178,16 @@ class AnalyticsSubTab(QWidget):
                         "description": f"[{cat_label}] Покупка: {item.get('name', 'Без названия')}",
                         "raw_date_fmt": "%d.%m.%Y"
                     })
+                    
+                    # Add Ad Cost (Cost of Appearance) as separate transaction
+                    coa_price = float(item.get("cost_of_appearance", 0))
+                    if coa_price > 0:
+                        transactions.append({
+                            "date": item_date.split(" ")[0], 
+                            "amount": -coa_price,
+                            "description": f"[{cat_label}] Объявление: {item.get('name', 'Без названия')}",
+                            "raw_date_fmt": "%d.%m.%Y"
+                        })
                 except (ValueError, TypeError):
                     continue
             for item in sold:
@@ -192,6 +204,16 @@ class AnalyticsSubTab(QWidget):
                         "description": f"[{cat_label}] Покупка: {item.get('name', 'Без названия')} (Продано)",
                         "raw_date_fmt": "%d.%m.%Y"
                     })
+                    
+                    # Add Ad Cost (Cost of Appearance) as separate transaction
+                    coa_price = float(item.get("cost_of_appearance", 0))
+                    if coa_price > 0:
+                        transactions.append({
+                            "date": item_date.split(" ")[0], 
+                            "amount": -coa_price,
+                            "description": f"[{cat_label}] Объявление: {item.get('name', 'Без названия')}",
+                            "raw_date_fmt": "%d.%m.%Y"
+                        })
                 except (ValueError, TypeError):
                     pass # Continue to sell part
                 
@@ -223,6 +245,16 @@ class AnalyticsSubTab(QWidget):
                 
             raw_tx = self.data_manager.get_transactions(cat)
             for t in raw_tx:
+                # If it's a separate ad cost transaction, include it normally
+                if t.get("is_ad_cost"):
+                    transactions.append({
+                        "date": t.get("date", ""),
+                        "amount": float(t.get("amount", 0)),
+                        "description": f"[{label}] " + (t.get("comment", "") or "Расход на объявление"),
+                        "raw_date_fmt": "%d.%m.%Y"
+                    })
+                    continue
+
                 transactions.append({
                     "date": t.get("date", ""),
                     "amount": float(t.get("amount", 0)),
@@ -230,15 +262,17 @@ class AnalyticsSubTab(QWidget):
                     "raw_date_fmt": "%d.%m.%Y"
                 })
                 
-                # Handle Ad Cost if present
-                ad_cost = float(t.get("ad_cost", 0))
-                if ad_cost > 0:
-                    transactions.append({
-                        "date": t.get("date", ""),
-                        "amount": -ad_cost,
-                        "description": f"[{label}] Расход на объявление: {t.get('item_name', '')}",
-                        "raw_date_fmt": "%d.%m.%Y"
-                    })
+                # Handle Ad Cost from the field ONLY if no separate transaction exists (old data)
+                has_separate_ad_tx = any(tx.get("parent_id") == t["id"] for tx in raw_tx)
+                if not has_separate_ad_tx:
+                    ad_cost = float(t.get("ad_cost", 0))
+                    if ad_cost > 0:
+                        transactions.append({
+                            "date": t.get("date", ""),
+                            "amount": -ad_cost,
+                            "description": f"[{label}] Расход на объявление: {t.get('item_name', '')}",
+                            "raw_date_fmt": "%d.%m.%Y"
+                        })
                     
         return transactions
 

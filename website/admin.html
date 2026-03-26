@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Вход в систему | Cyber Ledger</title>
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         body {
@@ -115,7 +115,7 @@
         </div>
     </div>
 
-    <script src="js/main.js"></script>
+    <script src="/js/main.js"></script>
     <script>
         async function doLogin() {
             const user = document.getElementById('user').value;
@@ -148,6 +148,7 @@
                 if (resp.ok) {
                     window.location.href = data.redirect || 'dashboard.html';
                 } else {
+                    error.textContent = data.msg || 'ДОСТУП ЗАПРЕЩЕН';
                     error.style.display = 'block';
                     btn.disabled = false;
                     btn.textContent = 'ВЫПОЛНИТЬ ВХОД';

@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtGui import QColor, QIcon
+import logging
 
 from gui.custom_dialogs import StyledDialogBase
 
@@ -755,17 +756,24 @@ class CapitalPlanningTab(QWidget):
         return balances["net_worth"]
 
     def refresh_data(self):
+        logging.info("CapitalPlanningTab: Refreshing data...")
         planning_data = self.data_manager.get_capital_planning_data()
-        if not planning_data: return
+        if not planning_data:
+            logging.warning("CapitalPlanningTab: No planning data found.")
+            return
 
         # 1. Goal Logic
         target = planning_data.get("target_amount", 0.0)
+        logging.info(f"CapitalPlanningTab: Target amount = {target}")
+        
         # Only update text if not focused to avoid overwriting user typing
         if not self.goal_input.hasFocus():
             self.goal_input.setText(str(int(target)) if target else "")
         
         balances = self.data_manager.get_total_capital_balance()
         current_capital = balances["liquid_cash"]
+        logging.info(f"CapitalPlanningTab: Current liquid cash = {current_capital}")
+        
         self.lbl_current.setText(f"Текущий капитал: ${int(current_capital):,}")
         
         # Update Main Window Balance Label

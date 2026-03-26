@@ -43,8 +43,7 @@ class CustomTitleBar(QWidget):
         self.update_btn.setVisible(False)
         self.layout.addWidget(self.update_btn)
 
-        # Title
-        self.title_label = QLabel("GTA 5 RP Dargon")
+        self.title_label = QLabel()
         self.title_label.setObjectName("WindowTitle")
         
         # Add shadow effect to title
@@ -152,6 +151,18 @@ class CustomTitleBar(QWidget):
         self.parent.close()
 
     def set_theme(self, theme_name):
+        # We need data_manager to get custom colors
+        try:
+            from data_manager import DataManager
+            dm = DataManager()
+            gta_color = dm.get_setting("header_gta_color", "#ffffff")
+            dargon_color = dm.get_setting("header_dargon_color", "#3b82f6")
+            show_dargon = dm.get_setting("header_show_dargon", True)
+        except:
+            gta_color = "#ffffff"
+            dargon_color = "#3b82f6"
+            show_dargon = True
+
         t = StyleManager.get_theme(theme_name)
         
         # Background blending
@@ -183,8 +194,15 @@ class CustomTitleBar(QWidget):
             }}
         """)
         
-        # Beautiful Title
-        self.title_label.setText(f'<span style="color: {title_color};">GTA 5 RP</span> <span style="color: {accent_color}; font-style: italic;">Dargon</span>')
+        # App Icon update (ensure it's visible)
+        icon_path = resource_path("icon.ico")
+        pixmap = QPixmap(icon_path)
+        if not pixmap.isNull():
+            self.icon_label.setPixmap(pixmap)
+        
+        # Beautiful Title with custom colors
+        dargon_html = f' <span style="color: {dargon_color}; font-style: italic;">Dargon</span>' if show_dargon else ''
+        self.title_label.setText(f'<span style="color: {gta_color};">GTA 5 RP</span>{dargon_html}')
         self.title_label.setStyleSheet(f"font-weight: 900; font-size: 20px; font-family: 'Segoe UI', sans-serif; border: none; letter-spacing: 1px;")
         
         self.active_profile_label.setStyleSheet(f"color: {active_profile_color}; background-color: transparent; font-weight: bold; margin-right: 10px; padding: 5px 15px; min-width: 150px; border-radius: 4px; border: 1px solid {active_profile_color};")

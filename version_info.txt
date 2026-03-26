@@ -6,8 +6,8 @@ VSVersionInfo(
   ffi=FixedFileInfo(
     # filevers and prodvers should be always a tuple with four items: (1, 2, 3, 4)
     # Set not needed items to zero 0.
-    filevers=(9, 0, 1, 0),
-    prodvers=(9, 0, 1, 0),
+    filevers=(1, 0, 0, 0),
+    prodvers=(1, 0, 0, 0),
     # Contains a bitmask that specifies the valid bits 'flags'.
     mask=0x3f,
     # Contains a bitmask that specifies the Boolean attributes of the file.
@@ -32,12 +32,12 @@ VSVersionInfo(
         u'040904B0',
         [StringStruct(u'CompanyName', u'Dargon'),
         StringStruct(u'FileDescription', u'MoneyTracker'),
-        StringStruct(u'FileVersion', u'9.0.1.0'),
+        StringStruct(u'FileVersion', u'1.0.0.0'),
         StringStruct(u'InternalName', u'MoneyTracker'),
         StringStruct(u'LegalCopyright', u'Copyright (c) 2026 Dargon. All rights reserved.'),
         StringStruct(u'OriginalFilename', u'MoneyTracker.exe'),
         StringStruct(u'ProductName', u'MoneyTracker'),
-        StringStruct(u'ProductVersion', u'9.0.1.0')])
+        StringStruct(u'ProductVersion', u'1.0.0.0')])
       ]), 
     VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
   ]

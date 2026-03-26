@@ -4,12 +4,42 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MoneyTracker Pro | Cyber Ledger System</title>
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
 </head>
-<body>
+<body class="loading">
+    <div id="preloader">
+        <div class="loader-content">
+            <i class="fas fa-wallet fa-spin"></i>
+            <div class="loader-bar">
+                <div class="loader-progress"></div>
+            </div>
+            <span>INITIALIZING SYSTEM...</span>
+        </div>
+    </div>
+
+    <script>
+        // Fail-safe: force hide preloader after 8 seconds if JS init hangs
+        setTimeout(function() {
+            const preloader = document.getElementById('preloader');
+            if (preloader && preloader.style.display !== 'none') {
+                console.warn('System initialization taking too long. Forcing UI display...');
+                preloader.style.opacity = '0';
+                setTimeout(() => {
+                    preloader.style.display = 'none';
+                    document.body.classList.remove('loading');
+                }, 800);
+            }
+        }, 8000);
+    </script>
     <canvas id="bg-canvas"></canvas>
+
+    <!-- Fullscreen Overlay -->
+    <div id="fullscreen-overlay" class="fullscreen-overlay">
+        <span class="close-overlay">&times;</span>
+        <img id="fullscreen-img" src="" alt="Full size">
+    </div>
 
     <!-- Header -->
     <header>
@@ -88,14 +118,14 @@
                     <h2>Готовы к <span class="gradient-text">апгрейду</span>?</h2>
                     <p style="margin-bottom: 20px; color: var(--text-muted);">Скачайте последнюю версию MoneyTracker Pro и возьмите финансы под полный контроль.</p>
                     <ul class="download-specs">
-                        <li>v<span class="app-version">9.3.0</span></li>
+                        <li>v<span class="app-version">1.0.0</span></li>
                         <li id="app-size">45 MB</li>
                         <li>Windows 10/11</li>
                     </ul>
                 </div>
                 <div class="download-action">
                     <div id="download-btn" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 20px;">
-                        <i class="fas fa-bolt"></i> СКАЧАТЬ ВЕРСИЮ <span class="app-version">9.3.0</span>
+                        <i class="fas fa-bolt"></i> СКАЧАТЬ ВЕРСИЮ <span class="app-version">1.0.0</span>
                     </div>
                     <div id="download-progress-container" style="display: none; margin-top: 20px;">
                         <div class="progress-bar">
@@ -129,7 +159,7 @@
                 </div>
             </div>
             <div class="footer-bottom">
-                &copy; 2026 MoneyTracker Pro. Все права защищены. [v<span class="app-version">9.3.0</span>]
+                &copy; 2026 MoneyTracker Pro. Все права защищены. [v<span class="app-version">1.0.0</span>]
             </div>
         </div>
     </footer>
@@ -151,20 +181,20 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js";
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyCLThGMtBUdgIG-Ym2cr58bNwyUe8Gelj8",
-            authDomain: "winterpass-66d00.firebaseapp.com",
-            projectId: "winterpass-66d00",
-            storageBucket: "winterpass-66d00.firebasestorage.app",
-            messagingSenderId: "552436893279",
-            appId: "1:552436893279:web:542c749ad58a2ce029fdea",
-            measurementId: "G-CRJZHKTNVP"
-        };
+        const firebaseConfig = { 
+            apiKey: "AIzaSyCkuuMhAgsojUF1OslO7zSMrC3dKxoAo-U", 
+            authDomain: "perekyprp.firebaseapp.com", 
+            projectId: "perekyprp", 
+            storageBucket: "perekyprp.firebasestorage.app", 
+            messagingSenderId: "286165285193", 
+            appId: "1:286165285193:web:36d2dfb77de7e3684e8298", 
+            measurementId: "G-M18P0MG4G4" 
+        }; 
 
         const app = initializeApp(firebaseConfig);
         const analytics = getAnalytics(app);
         console.log("Firebase Initialized");
     </script>
-    <script src="js/main.js"></script>
+    <script src="/js/main.js"></script>
 </body>
 </html>

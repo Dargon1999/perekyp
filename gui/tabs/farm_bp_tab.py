@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QLineEdit
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QTimer
-from PyQt6.QtGui import QCursor, QColor
+from PyQt6.QtGui import QCursor, QColor, QFont
 from datetime import datetime, timedelta
 import logging
 from gui.title_bar import CustomTitleBar
@@ -222,6 +222,10 @@ class FarmBPTab(QWidget):
         self.content_layout.addStretch()
         self.scroll.setWidget(self.content_widget)
         self.layout.addWidget(self.scroll)
+        
+        # Apply initial theme immediately after creation
+        initial_theme = self.data_manager.get_setting("theme", "dark")
+        self.apply_theme(initial_theme)
         
         self.is_initialized = False
         # self.refresh_data() # Deferred loading
@@ -527,8 +531,10 @@ class HistoryDialog(QDialog):
         
         # Table
         self.table = QTableWidget()
+        self.table.setFont(QFont("Segoe UI", 12))
         self.table.setColumnCount(3)
         self.table.setHorizontalHeaderLabels(["Дата", "Задание", "BP"])
+        self.table.horizontalHeader().setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -659,18 +665,23 @@ class HoverButton(QPushButton):
 class TaskWidget(QFrame):
     def __init__(self, name, base_reward, icon, is_multi, parent_tab):
         super().__init__()
+        self.setObjectName("TaskWidget")
         self.name = name
         self.base_reward = base_reward
         self.icon = icon
         self.is_multi = is_multi
         self.parent_tab = parent_tab
         self.count = 0
+        self.count_label = QLabel("0")
+        self.count_label.setFixedWidth(30)
+        self.count_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         # Default Theme Values (to prevent crash before theme is applied)
         self.normal_bg = "#2d2d2d"
         self.hover_bg = "#353535"
         self.active_bg = "#2c3e50"
-        self.text_color = "white"
+        self.text_main_color = "white"
+        self.arrow_color = "white"
         
         self.init_ui()
         
@@ -710,17 +721,14 @@ class TaskWidget(QFrame):
         
         if self.is_multi:
             # Counter controls for Multi tasks
-            self.minus_btn = QPushButton("←") 
+            self.minus_btn = QPushButton("◀") 
+            self.minus_btn.setObjectName("ArrowButton")
             self.minus_btn.setFixedSize(32, 32)
             self.minus_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             self.minus_btn.clicked.connect(self.on_minus)
             
-            self.count_label = QLabel("0")
-            self.count_label.setFixedSize(28, 32)
-            self.count_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.count_label.setStyleSheet("font-weight: bold; border: none; background: transparent;")
-            
-            self.plus_btn = QPushButton("→")
+            self.plus_btn = QPushButton("▶")
+            self.plus_btn.setObjectName("ArrowButton")
             self.plus_btn.setFixedSize(32, 32)
             self.plus_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             self.plus_btn.clicked.connect(self.on_plus)
@@ -728,14 +736,6 @@ class TaskWidget(QFrame):
             self.right_layout.addWidget(self.minus_btn)
             self.right_layout.addWidget(self.count_label)
             self.right_layout.addWidget(self.plus_btn)
-        else:
-            # Checkbox indicator for Single tasks (Hidden by default, used for state)
-            self.status_indicator = QLabel("⭕") # 🟢 when done
-            self.status_indicator.setFixedSize(28, 28)
-            self.status_indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.status_indicator.setStyleSheet("font-size: 16px; border: none; background: transparent;")
-            # self.right_layout.addWidget(self.status_indicator) 
-            # User asked to not see +/- buttons, so we just use the reward label and background color
         
         self.right_layout.addWidget(self.reward_label)
         self.layout.addLayout(self.right_layout)
@@ -764,74 +764,73 @@ class TaskWidget(QFrame):
         self.normal_bg = bg
         self.hover_bg = hover
         self.active_bg = active
-        self.text_color = text
+        self.text_main_color = text
         
         # Base style
         self.update_style()
         
-        self.name_label.setStyleSheet(f"color: {text}; font-size: 14px; font-weight: 500; border: none; background: transparent;")
         self.icon_label.setStyleSheet("font-size: 20px; border: none; background: transparent;")
         
         if self.is_multi:
-            self.count_label.setStyleSheet(f"color: {text}; font-weight: bold; border: none; background: transparent;")
-            # Minus Button (Transparent Arrow)
-            minus_style = f"""
-                QPushButton {{
-                    background-color: transparent;
-                    color: {text};
-                    border: none;
-                    font-weight: bold;
-                    font-size: 20px;
-                    padding: 0px;
-                }}
-                QPushButton:hover {{
-                    color: #e74c3c;
-                    background-color: #e74c3c1A;
-                    border-radius: 4px;
-                }}
-                QPushButton:pressed {{
-                    color: #c0392b;
-                }}
-            """
-            self.minus_btn.setStyleSheet(minus_style)
-            
-            # Plus Button (Transparent Arrow)
-            plus_style = f"""
-                QPushButton {{
-                    background-color: transparent;
-                    color: {text};
-                    border: none;
-                    font-weight: bold;
-                    font-size: 20px;
-                    padding: 0px;
-                }}
-                QPushButton:hover {{
-                    color: #2ecc71;
-                }}
-                QPushButton:pressed {{
-                    color: #27ae60;
-                }}
-            """
-            self.plus_btn.setStyleSheet(plus_style)
+            # Use specific color for arrows depending on theme
+            arrow_color = text
+            if self.parent_tab.current_theme in ["dark", "dark_blue"]:
+                arrow_color = "#ffffff"
+                
+            # Styles for buttons will be updated in update_style to handle background contrast
+            self.arrow_color = arrow_color
+            self.update_style()
 
     def update_style(self):
+        # Determine state
+        is_done = self.count > 0
+        
         # Determine background based on state
-        bg = self.normal_bg
-        if not self.is_multi and self.count > 0:
-            bg = self.active_bg # Highlight if done
+        if is_done:
+            # Use accent color for done state
+            bg = self.active_bg 
+            border_color = self.active_bg
+            
+            # Smart text color based on theme
+            # In light theme, the accent color might still be dark enough for white text,
+            # but usually for 'light' theme we might want to check
+            if self.parent_tab.current_theme == "light":
+                text_color = "#ffffff" # White usually looks good on blue/green accent backgrounds
+            else:
+                text_color = "#ffffff"
+        else:
+            bg = self.normal_bg
+            text_color = self.text_main_color
+            border_color = "transparent"
             
         self.setStyleSheet(f"""
-            TaskWidget {{
+            #TaskWidget {{
                 background-color: {bg};
+                border: 2px solid {border_color};
                 border-radius: 12px;
             }}
-            TaskWidget:hover {{
-                background-color: {self.hover_bg if self.count == 0 else self.active_bg};
+            #TaskWidget:hover {{
+                background-color: {self.hover_bg if not is_done else self.active_bg};
             }}
         """)
         
-        # Update text color dimming if needed
-        # If done, maybe dim text? Or keep bright? User didn't specify, so keeping bright.
+        # Force color updates for labels
+        self.name_label.setStyleSheet(f"color: {text_color}; font-size: 14px; font-weight: 500; border: none; background: transparent;")
+        
+        if self.is_multi:
+            self.count_label.setStyleSheet(f"color: {text_color}; font-weight: bold; font-size: 16px; border: none; background: transparent;")
+            
+            # Arrow buttons use the globally defined style but we set their color here for contrast
+            # On active background, arrows should be white
+            arrow_btn_color = "#ffffff" if is_done else self.text_main_color
+            
+            # Reset style to ensure it picks up the global ArrowButton definition + local color
+            # Use !important to override any other styles
+            self.minus_btn.setStyleSheet(f"color: {arrow_btn_color} !important; background: transparent !important; border: none !important;")
+            self.plus_btn.setStyleSheet(f"color: {arrow_btn_color} !important; background: transparent !important; border: none !important;")
+            
+        # Update Reward Display
+        self.update_reward_display()
 
     def update_reward_display(self):
         mult = 1
@@ -841,12 +840,19 @@ class TaskWidget(QFrame):
         self.reward_label.setText(f"+{val}")
         
         # Color: Green if done (single) or count > 0 (multi), else Grey/Default
-        color = "#2ecc71" # Green
-        if self.count == 0:
-            color = "#7f8c8d" # Grey
-            if hasattr(self, 'text_color'): # If theme applied
-                 pass # Use theme text color? No, reward is usually specific color
+        is_active = self.count > 0
         
+        if is_active:
+            # In light theme, green should be a bit darker for better contrast if background is white,
+            # but if the WHOLE row is active (accent color), then white text is better.
+            if not self.is_multi:
+                color = "white" # High contrast on active (accent) bg
+            else:
+                # For multi tasks with only border highlight? No, we have full bg highlight now.
+                color = "white"
+        else:
+            color = "#7f8c8d" # Grey when 0 (safe for all themes)
+            
         self.reward_label.setStyleSheet(f"font-size: 15px; color: {color}; font-weight: bold; border: none; background: transparent;")
 
     def set_count(self, count):

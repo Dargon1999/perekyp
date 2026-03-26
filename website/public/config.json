@@ -1,0 +1,124 @@
+{
+    "app_name": "MoneyTracker Pro",
+    "version": "9.3.0",
+    "release_date": "15.03.2026",
+    "download_url": "/uploads/software/MoneyTracker.exe",
+    "file_size": "45.2 MB",
+    "description": "Профессиональное решение для автоматизации учета финансов, управления активами и контроля времени. MoneyTracker Pro v9.3 объединяет в себе мощь Ledger-системы, гибкость плагинов и интуитивно понятный интерфейс для достижения ваших финансовых целей.",
+    "why_us": [
+        {
+            "icon": "fas fa-microchip",
+            "title": "Уникальные технологии",
+            "desc": "Собственное ядро на базе Ledger-архитектуры гарантирует неизменяемость данных и 100% точность баланса."
+        },
+        {
+            "icon": "fas fa-bolt",
+            "title": "Экстремальная скорость",
+            "desc": "Обработка транзакций без задержек в интерфейсе благодаря асинхронному движку на SQLite."
+        },
+        {
+            "icon": "fas fa-headset",
+            "title": "Поддержка 24/7",
+            "desc": "Мгновенная помощь от разработчиков и активного комьюнити в Discord и Telegram."
+        },
+        {
+            "icon": "fas fa-shield-alt",
+            "title": "Безопасность данных",
+            "desc": "Локальное хранение базы данных с шифрованием и автоматическим созданием резервных копий."
+        },
+        {
+            "icon": "fas fa-user-check",
+            "title": "Индивидуальный подход",
+            "desc": "Модульная система плагинов позволяет адаптировать софт под ваши уникальные задачи."
+        }
+    ],
+    "features": [
+        {
+            "category": "Финансовое ядро (Ledger)",
+            "items": [
+                {
+                    "icon": "fas fa-book",
+                    "title": "Система Ledger",
+                    "desc": "Надежный учет на базе SQLite с полной историей операций и аудитом каждой транзакции."
+                },
+                {
+                    "icon": "fas fa-database",
+                    "title": "Локальная БД",
+                    "desc": "Ваши данные хранятся только у вас. Используется мощный ORM SQLAlchemy для стабильности."
+                }
+            ]
+        },
+        {
+            "category": "Учет Активов",
+            "items": [
+                {
+                    "icon": "fas fa-gem",
+                    "title": "Менеджер имущества",
+                    "desc": "Учет недвижимости, техники и других активов с автоматическим расчетом чистого капитала (Net Worth)."
+                },
+                {
+                    "icon": "fas fa-chart-line",
+                    "title": "Прогнозирование",
+                    "desc": "Анализ доходности ваших активов и расчет амортизации в реальном времени."
+                }
+            ]
+        },
+        {
+            "category": "Умные Таймеры",
+            "items": [
+                {
+                    "icon": "fas fa-stopwatch",
+                    "title": "Уведомления",
+                    "desc": "Гибкая настройка таймеров с выбором звуков, режимом Snooze и повторами."
+                },
+                {
+                    "icon": "fas fa-expand",
+                    "title": "Fullscreen Mode",
+                    "desc": "Полноэкранные оповещения поверх всех окон (Top-most) для важных напоминаний."
+                }
+            ]
+        },
+        {
+            "category": "Расширяемость",
+            "items": [
+                {
+                    "icon": "fas fa-puzzle-piece",
+                    "title": "Система Плагинов",
+                    "desc": "Загрузка модулей (например, Fishing tracker) из папки plugins без изменения ядра программы."
+                },
+                {
+                    "icon": "fas fa-file-export",
+                    "title": "Экспорт и Бэкапы",
+                    "desc": "Выгрузка данных в JSON/CSV и автоматическое создание резервных копий базы данных."
+                }
+            ]
+        }
+    ],
+    "screenshots": [
+        {
+            "url": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=800&q=80",
+            "title": "Аналитическая панель управления"
+        },
+        {
+            "url": "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80",
+            "title": "Журнал финансовых операций"
+        },
+        {
+            "url": "https://images.unsplash.com/photo-1543286386-713bdd548da4?auto=format&fit=crop&w=800&q=80",
+            "title": "Мониторинг активов в реальном времени"
+        },
+        {
+            "url": "https://images.unsplash.com/photo-1454165205744-3b78555e5572?auto=format&fit=crop&w=800&q=80",
+            "title": "Настройка персональных таймеров"
+        },
+        {
+            "url": "https://images.unsplash.com/photo-1551434678-e076c223a692?auto=format&fit=crop&w=800&q=80",
+            "title": "Конфигурация системы плагинов"
+        }
+    ],
+    "contacts": {
+        "discord": "discord.gg/moneytracker",
+        "telegram": "@moneytracker_pro",
+        "email": "support@moneytracker.pro"
+    }
+}

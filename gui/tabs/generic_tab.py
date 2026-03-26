@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
     QDateEdit, QMessageBox, QFileDialog
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QDate, QTimer
-from PyQt6.QtGui import QColor
+from PyQt6.QtGui import QColor, QFont
 from datetime import datetime, timedelta
 from gui.styles import StyleManager
 
@@ -414,10 +414,12 @@ class GenericTab(QWidget):
 
     def setup_table(self):
         self.table = QTableWidget()
+        self.table.setFont(QFont("Segoe UI", 12))
         self.table.setColumnCount(5)
         self.table.setHorizontalHeaderLabels(["Сумма", "Товар/Авто", "Примечание", "Дата", "Действия"])
         
         header = self.table.horizontalHeader()
+        header.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
@@ -510,6 +512,15 @@ class GenericTab(QWidget):
         filtered_transactions = []
         transactions = self.data_manager.get_transactions(self.category)
         
+        # Ensure transactions are sorted newest first for display
+        try:
+            transactions.sort(
+                key=lambda x: (datetime.strptime(x.get("date", "01.01.2000"), "%d.%m.%Y"), x.get("timestamp", 0)), 
+                reverse=True
+            )
+        except:
+            pass
+
         today = datetime.now().date()
         
         for t_trans in transactions:

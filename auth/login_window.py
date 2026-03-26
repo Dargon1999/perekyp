@@ -32,6 +32,23 @@ def create_svg_icon(svg_content, size=24, color="white"):
     painter.end()
     return QIcon(pixmap)
 
+class DeactivateWorker(QThread):
+    finished = pyqtSignal(bool, str)
+
+    def __init__(self, auth_manager, login, password, key):
+        super().__init__()
+        self.auth_manager = auth_manager
+        self.login = login
+        self.password = password
+        self.key = key
+
+    def run(self):
+        try:
+            success, message = self.auth_manager.deactivate_key(self.login, self.password, self.key)
+            self.finished.emit(success, message)
+        except Exception as e:
+            self.finished.emit(False, str(e))
+
 class LoginWorker(QThread):
     finished = pyqtSignal(bool, str, object) # success, message, expires_at
 
@@ -241,5 +258,41 @@ class LoginWindow(QDialog):
         else:
             self.login_btn.setText("Войти")
             self.login_btn.setEnabled(True)
-            dlg = AlertDialog(self, "Ошибка доступа", message)
-            dlg.exec()
+            
+            if message == "ERR_HWID_MISMATCH":
+                from gui.custom_dialogs import ConfirmationDialog
+                dlg = ConfirmationDialog(
+                    self, 
+                    "Ключ занят", 
+                    "Этот ключ уже активирован на другом ПК.\n\n"
+                    "Хотите сбросить привязку и активировать ключ на этом компьютере?\n"
+                    "(Потребуется ввести верный логин и пароль)"
+                )
+                if dlg.exec():
+                    self.attempt_deactivation()
+            else:
+                dlg = AlertDialog(self, "Ошибка доступа", message)
+                dlg.exec()
+
+    def attempt_deactivation(self):
+        login = self.login_input.text().strip()
+        password = self.password_input.text().strip()
+        key = self.key_input.text().strip()
+        
+        self.login_btn.setText("Сброс...")
+        self.login_btn.setEnabled(False)
+        
+        self.deact_worker = DeactivateWorker(self.auth_manager, login, password, key)
+        self.deact_worker.finished.connect(self.on_deactivation_finished)
+        self.deact_worker.start()
+
+    def on_deactivation_finished(self, success, message):
+        self.login_btn.setText("Войти")
+        self.login_btn.setEnabled(True)
+        
+        dlg = AlertDialog(self, "Результат", message)
+        dlg.exec()
+        
+        if success:
+            # Try login again automatically
+            self.attempt_login()

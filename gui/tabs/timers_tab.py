@@ -322,8 +322,9 @@ class FullscreenNotification(QDialog):
         self.sound_path = sound_path
         self.loop_sound = loop_sound
         
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Window)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         
         # Fullscreen
         screen_geo = QApplication.primaryScreen().geometry()
@@ -414,8 +415,6 @@ class FullscreenNotification(QDialog):
             else:
                 self.player.setLoops(QMediaPlayer.Loops.Once)
             self.player.play()
-        else:
-            QApplication.beep()
 
     def snooze(self):
         self.done(10) # Custom code for snooze
@@ -849,40 +848,38 @@ class TimerCard(QFrame):
         # Calculate remaining time
         now = datetime.now().timestamp()
         
-        if self.timer_data["is_running"]:
+        is_running = self.timer_data.get("is_running", False)
+        
+        # Only update button icon/style if state changed
+        if not hasattr(self, '_last_running_state') or self._last_running_state != is_running:
+            self._last_running_state = is_running
+            if is_running:
+                self.btn_toggle.setIcon(self.create_pause_icon("white"))
+                self.btn_toggle.setToolTip("Пауза")
+                self.btn_toggle.setStyleSheet("""
+                    QPushButton { 
+                        background-color: #f1c40f; 
+                        border-radius: 20px; 
+                        border: none; 
+                    } 
+                    QPushButton:hover { background-color: #f39c12; }
+                """)
+            else:
+                self.btn_toggle.setIcon(self.create_play_icon("white"))
+                self.btn_toggle.setToolTip("Возобновить")
+                self.btn_toggle.setStyleSheet("""
+                    QPushButton { 
+                        background-color: #2ecc71; 
+                        border-radius: 20px; 
+                        border: none; 
+                    } 
+                    QPushButton:hover { background-color: #27ae60; }
+                """)
+            
+        if is_running:
             remaining = self.timer_data["end_time"] - now
-            self.btn_toggle.setText("")
-            self.btn_toggle.setIcon(self.create_pause_icon("white"))
-            self.btn_toggle.setIconSize(QSize(20, 20))
-            self.btn_toggle.setToolTip("Пауза")
-            self.btn_toggle.setStyleSheet("""
-                QPushButton { 
-                    background-color: #f1c40f; 
-                    border-radius: 20px; 
-                    border: none; 
-                    color: white;
-                    font-size: 16px; /* Added */
-                    font-weight: bold; /* Added */
-                } 
-                QPushButton:hover { background-color: #f39c12; }
-            """)
         else:
             remaining = self.timer_data.get("paused_remaining", 0)
-            self.btn_toggle.setText("")
-            self.btn_toggle.setIcon(self.create_play_icon("white"))
-            self.btn_toggle.setIconSize(QSize(20, 20))
-            self.btn_toggle.setToolTip("Возобновить")
-            self.btn_toggle.setStyleSheet("""
-                QPushButton { 
-                    background-color: #2ecc71; 
-                    border-radius: 20px; 
-                    border: none; 
-                    color: white;
-                    font-size: 16px; /* Added */
-                    font-weight: bold; /* Added */
-                } 
-                QPushButton:hover { background-color: #27ae60; }
-            """)
             
         if remaining < 0: remaining = 0
         
@@ -893,49 +890,60 @@ class TimerCard(QFrame):
         minutes, seconds = divmod(remainder, 60)
         
         time_str = f"{days:02}:{hours:02}:{minutes:02}:{seconds:02}"
-            
-        if remaining <= 0 and self.timer_data["is_running"]:
+        
+        # Determine status color
+        status_type = "running"
+        if remaining <= 0 and is_running:
+            status_type = "completed"
             time_str = "ЗАВЕРШЕНО"
-            self.time_lbl.setStyleSheet("color: #e74c3c; font-size: 24px; font-weight: bold;")
-        elif not self.timer_data["is_running"]:
+        elif not is_running:
+            status_type = "paused"
             time_str += " (Пауза)"
-            self.time_lbl.setStyleSheet("color: #95a5a6; font-size: 24px; font-weight: bold;")
-        else:
-            self.time_lbl.setStyleSheet("color: #f1c40f; font-size: 24px; font-weight: bold;")
+
+        # Only update time label style if status changed
+        if not hasattr(self, '_last_status_type') or self._last_status_type != status_type:
+            self._last_status_type = status_type
+            if status_type == "completed":
+                self.time_lbl.setStyleSheet("color: #e74c3c; font-size: 24px; font-weight: bold;")
+            elif status_type == "paused":
+                self.time_lbl.setStyleSheet("color: #95a5a6; font-size: 24px; font-weight: bold;")
+            else:
+                self.time_lbl.setStyleSheet("color: #f1c40f; font-size: 24px; font-weight: bold;")
             
         self.time_lbl.setText(time_str)
         
         # Progress Bar
-        total = self.timer_data["duration"]
+        total = self.timer_data.get("duration", 0)
         if total > 0:
             percent = int((remaining / total) * 100)
             self.progress.setValue(percent)
             
             # Color coding
-            color = "#2ecc71" # Green > 50%
-            if percent < 25: color = "#e74c3c" # Red
-            elif percent < 50: color = "#f39c12" # Yellow
+            color_key = "green"
+            if percent < 25: color_key = "red"
+            elif percent < 50: color_key = "yellow"
             
-            self.progress.setStyleSheet(f"""
-                QProgressBar {{
-                    background-color: #2c3e50;
-                    border-radius: 5px;
-                }}
-                QProgressBar::chunk {{
-                    background-color: {color};
-                    border-radius: 5px;
-                }}
-            """)
+            if not hasattr(self, '_last_color_key') or self._last_color_key != color_key:
+                self._last_color_key = color_key
+                color_hex = "#2ecc71" if color_key == "green" else "#e74c3c" if color_key == "red" else "#f39c12"
+                self.progress.setStyleSheet(f"""
+                    QProgressBar {{
+                        background-color: #2c3e50;
+                        border-radius: 5px;
+                    }}
+                    QProgressBar::chunk {{
+                        background-color: {color_hex};
+                        border-radius: 5px;
+                    }}
+                """)
         
         # Check for completion to trigger parent notification logic (handled in parent loop usually, but visual update is here)
 
 
 class TimerCompleteDialog(StyledDialogBase):
-    def __init__(self, parent, timer_name):
+    def __init__(self, parent, timer_name, standalone_player=None):
         super().__init__(parent, "Таймер завершен!", width=400)
-        
-        # Sound
-        QApplication.beep()
+        self.standalone_player = standalone_player
         
         # Icon
         icon_lbl = QLabel("⏰")
@@ -950,9 +958,34 @@ class TimerCompleteDialog(StyledDialogBase):
         msg.setStyleSheet(f"font-size: 18px; font-weight: bold; color: {self.text_color};")
         self.content_layout.addWidget(msg)
         
-        # Button
-        btn = self.create_button("Отлично", "success", self.accept)
-        self.content_layout.addWidget(btn)
+        # Buttons
+        btn_layout = QHBoxLayout()
+        
+        ok_btn = self.create_button("Отлично", "success", self.accept)
+        snooze_btn = self.create_button("Отложить (5 мин)", "primary", self.snooze)
+        
+        btn_layout.addWidget(ok_btn)
+        btn_layout.addWidget(snooze_btn)
+        self.content_layout.addLayout(btn_layout)
+
+    def snooze(self):
+        self.done(10) # Custom code for snooze
+
+    def stop_sound(self):
+        if self.standalone_player:
+            self.standalone_player.stop()
+
+    def accept(self):
+        self.stop_sound()
+        super().accept()
+
+    def reject(self):
+        self.stop_sound()
+        super().reject()
+
+    def closeEvent(self, event):
+        self.stop_sound()
+        super().closeEvent(event)
 
 class TimersTab(QWidget):
     def __init__(self, data_manager, main_window):
@@ -962,6 +995,7 @@ class TimersTab(QWidget):
         self.timers = []
         self.timer_widgets = []
         self.notified_timers = set() # Store IDs of timers we already notified about
+        self._notification_active = False # Flag to prevent re-entrant notifications
         
         self.setup_ui()
         
@@ -1143,138 +1177,201 @@ class TimersTab(QWidget):
         if not hasattr(self, 'timer_widgets'):
             return
             
-        now = datetime.now().timestamp()
-        
-        for card in self.timer_widgets:
-            card.update_ui()
+        try:
+            now = datetime.now().timestamp()
             
-            # Check for notification
-            timer = card.timer_data
-            if timer["is_running"]:
-                remaining = timer["end_time"] - now
-                if remaining <= 0 and timer["id"] not in self.notified_timers:
-                    # Check notification mode
-                    mode = self.get_notification_mode()
+            # Use a copy of the list to avoid issues if refresh_data is called mid-loop
+            widgets_to_process = list(self.timer_widgets)
+            
+            for card in widgets_to_process:
+                # Ensure card still exists and has timer_data
+                if not card or not hasattr(card, 'timer_data'):
+                    continue
                     
-                    if mode == "silent_keep" and timer["type"] == "Контракт":
-                         # Mark as notified but don't show dialog
-                         self.notified_timers.add(timer["id"])
-                    else:
-                        # "notify_and_delete" or "notify_keep" or not a contract
-                        self.trigger_notification(timer)
+                card.update_ui()
+                
+                # Check for notification - ONLY if no notification is currently active
+                if self._notification_active:
+                    continue
+
+                timer = card.timer_data
+                if timer.get("is_running"):
+                    remaining = timer.get("end_time", 0) - now
+                    if remaining <= 0 and timer["id"] not in self.notified_timers:
+                        logger.info(f"Timer triggered: {timer['name']} (ID: {timer['id']})")
+                        # Check notification mode
+                        mode = self.get_notification_mode()
+                        
+                        if mode == "silent_keep" and timer["type"] == "Контракт":
+                             # Mark as notified but don't show dialog
+                             self.notified_timers.add(timer["id"])
+                        else:
+                             self.trigger_notification(timer)
+        except Exception as e:
+            logger.error(f"Error in TimersTab.on_tick: {e}", exc_info=True)
 
     def trigger_notification(self, timer):
-        # Mark as notified immediately to prevent double triggers
-        self.notified_timers.add(timer["id"])
+        try:
+            # Mark as notified immediately to prevent double triggers
+            self.notified_timers.add(timer["id"])
+            self._notification_active = True
+            logger.info(f"Triggering notification for {timer['name']}")
 
-        # Check if window is hidden (System Tray mode)
-        if not self.main_window.isVisible() and hasattr(self.main_window, 'tray_icon'):
-             self.main_window.tray_icon.showMessage(
-                 "Таймер завершен!",
-                 f"Таймер «{timer['name']}» истек!",
-                 QSystemTrayIcon.MessageIcon.Information,
-                 5000
-             )
-             
-             # Even in tray mode, play the selected sound
-             sound_file = self.data_manager.get_setting("timer_sound", "beep.wav")
-             sound_path = resource_path(os.path.join("assets", "sounds", sound_file))
-             if os.path.exists(sound_path):
-                 self.play_standalone_sound(sound_path)
-             else:
-                 QApplication.beep()
+            # Check if window is hidden (System Tray mode)
+            if not self.main_window.isVisible() and hasattr(self.main_window, 'tray_icon'):
+                 logger.info("Window hidden, showing tray notification")
+                 self.main_window.tray_icon.showMessage(
+                     "Таймер завершен!",
+                     f"Таймер «{timer['name']}» истек!",
+                     QSystemTrayIcon.MessageIcon.Information,
+                     5000
+                 )
+                 
+                 # Even in tray mode, play the selected sound
+                 sound_file = self.data_manager.get_setting("timer_sound", "beep.wav")
+                 sound_path = resource_path(os.path.join("assets", "sounds", sound_file))
+                 if os.path.exists(sound_path):
+                     self.play_standalone_sound(sound_path)
+                 else:
+                     QApplication.beep()
 
-             # Handle auto-delete for tray notification
-             mode = self.get_notification_mode()
-             if mode == "notify_and_delete" and timer["type"] == "Контракт":
-                 self.data_manager.delete_timer(timer["id"])
-                 self.refresh_data()
-             return
-        
-        # Get settings
-        is_topmost = self.data_manager.get_setting("timer_topmost", False)
-        is_loop = self.data_manager.get_setting("timer_loop", False)
-        sound_file = self.data_manager.get_setting("timer_sound", "beep.wav")
-        sound_path = resource_path(os.path.join("assets", "sounds", sound_file))
-
-        if is_topmost:
-            # Minimize all windows (simulate Win+D)
-            # Note: This is a Windows-specific shell call, for cross-platform we can't easily do this without specific libs
-            # but we can at least make our window topmost and fullscreen.
-            if os.name == 'nt':
-                try:
-                    import ctypes
-                    ctypes.windll.user32.ShowCursor(True)
-                    # Minimize all windows (Win+D)
-                    import subprocess
-                    subprocess.run(["powershell", "-Command", "(New-Object -ComObject shell.application).minimizeall()"], capture_output=True)
-                except:
-                    pass
+                 # Handle auto-delete for tray notification
+                 mode = self.get_notification_mode()
+                 if mode == "notify_and_delete" and timer["type"] == "Контракт":
+                     self.data_manager.delete_timer(timer["id"])
+                     QTimer.singleShot(0, self.refresh_data)
+                 
+                 self._notification_active = False # Reset immediately for tray notification
+                 return
             
-            # Show Fullscreen Notification
-            dlg = FullscreenNotification(timer['name'], sound_path, loop_sound=is_loop)
-            res = dlg.exec()
-            
-            if res == 10: # Snooze
-                self.snooze_timer(timer)
+            # Get settings
+            is_topmost = self.data_manager.get_setting("timer_topmost", False)
+            is_loop = self.data_manager.get_setting("timer_loop", False)
+            sound_file = self.data_manager.get_setting("timer_sound", "beep.wav")
+            sound_path = resource_path(os.path.join("assets", "sounds", sound_file))
+
+            if is_topmost:
+                logger.info("Showing Fullscreen Notification")
+                
+                # Minimize all windows (simulate Win+D) - re-added as requested
+                if os.name == 'nt':
+                    try:
+                        import ctypes
+                        ctypes.windll.user32.ShowCursor(True)
+                        import subprocess
+                        # Using CREATE_NO_WINDOW to prevent flash of console
+                        subprocess.Popen(["powershell", "-Command", "(New-Object -ComObject shell.application).minimizeall()"], 
+                                       creationflags=0x08000000) # CREATE_NO_WINDOW
+                    except Exception as ex:
+                        logger.warning(f"Failed to minimize windows: {ex}")
+
+                # Show Fullscreen Notification
+                dlg = FullscreenNotification(timer['name'], sound_path, loop_sound=is_loop)
+                # Store in self to prevent GC
+                self._current_notification = dlg
+                
+                dlg.setWindowFlags(dlg.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+                
+                def handle_fullscreen_finished(result):
+                    logger.info(f"Fullscreen notification closed with result: {result}")
+                    self._notification_active = False
+                    self._current_notification = None # Clear reference
+                    if result == 10:
+                        self.snooze_timer(timer)
+                    else:
+                        self.on_notification_closed(timer)
+                
+                dlg.finished.connect(handle_fullscreen_finished)
+                dlg.showFullScreen()
+                dlg.raise_()
+                dlg.activateWindow()
             else:
-                self.on_notification_closed(timer)
-        else:
-            # Custom Dialog
-            dlg = TimerCompleteDialog(self, timer['name'])
-            # Make it stay on top
-            dlg.setWindowFlags(dlg.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
-            
-            # Play sound
-            if os.path.exists(sound_path):
-                self.play_standalone_sound(sound_path, loop=is_loop)
-            else:
-                QApplication.beep()
+                logger.info("Showing Standard Notification Dialog")
+                # Play sound FIRST if path exists
+                standalone_player = None
+                if os.path.exists(sound_path):
+                    standalone_player = self.play_standalone_sound(sound_path, loop=is_loop)
+                else:
+                    QApplication.beep()
 
-            # Handle deletion after dialog close
-            dlg.finished.connect(lambda result: self.on_notification_closed(timer))
-            dlg.show()
-            self._current_notification = dlg
+                # Custom Dialog
+                dlg = TimerCompleteDialog(self, timer['name'], standalone_player=standalone_player)
+                # Store in self to prevent GC
+                self._current_notification = dlg
+                
+                # Make it stay on top
+                dlg.setWindowFlags(dlg.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+                
+                # Handle deletion/snooze after dialog close
+                def handle_finished(result):
+                    logger.info(f"Standard dialog closed with result: {result}")
+                    self._notification_active = False
+                    self._current_notification = None # Clear reference
+                    if result == 10:
+                        self.snooze_timer(timer)
+                    else:
+                        self.on_notification_closed(timer)
+                
+                dlg.finished.connect(handle_finished)
+                dlg.show()
+                dlg.raise_()
+                dlg.activateWindow()
+        except Exception as e:
+            logger.error(f"Error in trigger_notification: {e}", exc_info=True)
+            self._notification_active = False # Reset on error
 
     def play_standalone_sound(self, sound_path, loop=False):
         """Helper to play sound without a dedicated dialog."""
-        if not hasattr(self, '_standalone_player'):
-            self._standalone_player = QMediaPlayer()
-            self._standalone_audio = QAudioOutput()
-            self._standalone_player.setAudioOutput(self._standalone_audio)
-        
-        self._standalone_player.setSource(QUrl.fromLocalFile(sound_path))
-        self._standalone_audio.setVolume(1.0)
-        if loop:
-            self._standalone_player.setLoops(QMediaPlayer.Loops.Infinite)
-        else:
-            self._standalone_player.setLoops(QMediaPlayer.Loops.Once)
-        self._standalone_player.play()
+        try:
+            if not hasattr(self, '_standalone_player'):
+                self._standalone_player = QMediaPlayer()
+                self._standalone_audio = QAudioOutput()
+                self._standalone_player.setAudioOutput(self._standalone_audio)
+            
+            self._standalone_player.setSource(QUrl.fromLocalFile(sound_path))
+            self._standalone_audio.setVolume(1.0)
+            if loop:
+                self._standalone_player.setLoops(QMediaPlayer.Loops.Infinite)
+            else:
+                self._standalone_player.setLoops(QMediaPlayer.Loops.Once)
+            self._standalone_player.play()
+            return self._standalone_player
+        except Exception as e:
+            logger.error(f"Error playing standalone sound: {e}")
+            return None
 
     def snooze_timer(self, timer):
         """Snoozes the timer for 5 minutes."""
-        # Update timer in DB to +5 minutes from now
-        now = datetime.now().timestamp()
-        duration = 5 * 60
-        updates = {
-            "start_time": now,
-            "end_time": now + duration,
-            "duration": duration,
-            "is_running": True,
-            "paused_remaining": 0
-        }
-        if self.data_manager.update_timer(timer["id"], updates):
-            # Remove from notified set to allow re-notification
-            if timer["id"] in self.notified_timers:
-                self.notified_timers.remove(timer["id"])
-            self.refresh_data()
-            logger.info(f"Timer {timer['name']} snoozed for 5 minutes.")
+        try:
+            logger.info(f"Snoozing timer {timer['name']}")
+            now = datetime.now().timestamp()
+            duration = 5 * 60
+            updates = {
+                "start_time": now,
+                "end_time": now + duration,
+                "duration": duration,
+                "is_running": True,
+                "paused_remaining": 0
+            }
+            if self.data_manager.update_timer(timer["id"], updates):
+                if timer["id"] in self.notified_timers:
+                    self.notified_timers.remove(timer["id"])
+                # Use singleShot for refresh
+                QTimer.singleShot(0, self.refresh_data)
+                logger.info(f"Timer {timer['name']} snoozed for 5 minutes.")
+        except Exception as e:
+            logger.error(f"Error in snooze_timer: {e}")
 
     def on_notification_closed(self, timer):
-        mode = self.get_notification_mode()
-        if mode == "notify_and_delete" and timer["type"] == "Контракт":
-             self.data_manager.delete_timer(timer["id"])
-             self.refresh_data()
+        try:
+            logger.info(f"Notification closed for {timer['name']}")
+            mode = self.get_notification_mode()
+            if mode == "notify_and_delete" and timer["type"] == "Контракт":
+                 logger.info(f"Deleting contract timer {timer['name']}")
+                 self.data_manager.delete_timer(timer["id"])
+                 QTimer.singleShot(0, self.refresh_data)
+        except Exception as e:
+            logger.error(f"Error in on_notification_closed: {e}")
 
     def apply_theme(self, theme):
         # Optional: Implement theme logic if strictly needed, 

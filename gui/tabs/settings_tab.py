@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QGridLayout, QButtonGroup, QRadioButton, QGraphicsOpacityEffect,
     QFileDialog, QTabWidget
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QPropertyAnimation, QEasingCurve
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QPropertyAnimation, QEasingCurve, QTimer
 from PyQt6.QtGui import QIcon, QColor, QPainter, QPixmap
 from PyQt6.QtSvg import QSvgRenderer
 from gui.styles import StyleManager
@@ -218,6 +218,9 @@ class SettingsTab(QWidget):
         
         self.setup_ui()
         
+        # Connect signals
+        self.data_manager.data_changed.connect(self.update_storage_path_info)
+        
     def setup_ui(self):
         # Main Layout (Vertical for Top Nav)
         self.main_layout = QVBoxLayout(self)
@@ -243,7 +246,8 @@ class SettingsTab(QWidget):
             (1, "Обновление", "gui/assets/icons/update.svg"),
             (2, "Вкладки", "gui/assets/icons/tabs.svg"),
             (3, "Дополнительно", "gui/assets/icons/advanced.svg"),
-            (4, "Связь", "gui/assets/icons/feedback.svg")
+            (4, "Связь", "gui/assets/icons/feedback.svg"),
+            (5, "Информация", "gui/assets/icons/info.svg")
         ]
         
         self.nav_buttons = {}
@@ -296,6 +300,7 @@ class SettingsTab(QWidget):
         self.create_tab_mgmt_page()     # Index 2
         self.create_advanced_page()     # Index 3
         self.create_contact_page()      # Index 4
+        self.create_info_page()         # Index 5
         
         # Select first page
         self.nav_buttons[0].setChecked(True)
@@ -406,6 +411,43 @@ class SettingsTab(QWidget):
         data_btns_layout.addStretch()
         layout.addLayout(data_btns_layout)
         
+        # --- App Data Path Section ---
+        path_group = QGroupBox("Путь к данным приложения")
+        path_layout = QVBoxLayout(path_group)
+        path_layout.setSpacing(10)
+        
+        path_info_lbl = QLabel("Все данные и настройки сохраняются в следующей папке:")
+        path_info_lbl.setStyleSheet("color: #9ca3af; font-size: 12px;")
+        path_layout.addWidget(path_info_lbl)
+        
+        path_row = QHBoxLayout()
+        self.storage_path_input = QLineEdit()
+        self.storage_path_input.setReadOnly(True)
+        self.storage_path_input.setFixedHeight(35)
+        self.storage_path_input.setCursor(Qt.CursorShape.IBeamCursor)
+        self.storage_path_input.setToolTip("Нажмите, чтобы выделить путь")
+        path_row.addWidget(self.storage_path_input)
+        
+        self.copy_path_btn = QPushButton("Копировать")
+        self.copy_path_btn.setFixedSize(100, 35)
+        self.copy_path_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.copy_path_btn.clicked.connect(self.copy_storage_path)
+        path_row.addWidget(self.copy_path_btn)
+        
+        self.open_path_btn = QPushButton("Открыть")
+        self.open_path_btn.setFixedSize(100, 35)
+        self.open_path_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.open_path_btn.clicked.connect(self.open_storage_path)
+        path_row.addWidget(self.open_path_btn)
+        
+        path_layout.addLayout(path_row)
+        
+        self.path_status_lbl = QLabel("")
+        self.path_status_lbl.setStyleSheet("font-size: 11px;")
+        path_layout.addWidget(self.path_status_lbl)
+        
+        layout.addWidget(path_group)
+        
         # Divider
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
@@ -417,13 +459,116 @@ class SettingsTab(QWidget):
         theme_layout.addWidget(QLabel("Тема оформления:"))
         theme_layout.addStretch()
         self.theme_combo = QComboBox()
-        self.theme_combo.addItems(["Темная (Dark)", "Светлая (Light)"])
+        self.theme_combo.addItems(["Темная (Dark)", "Светлая (Light)", "Тёмно-синяя (Dark Blue)"])
         self.theme_combo.setFixedWidth(200)
         current_theme = self.data_manager.get_setting("theme", "dark")
-        self.theme_combo.setCurrentIndex(0 if current_theme == "dark" else 1)
+        if current_theme == "dark": self.theme_combo.setCurrentIndex(0)
+        elif current_theme == "light": self.theme_combo.setCurrentIndex(1)
+        elif current_theme == "dark_blue": self.theme_combo.setCurrentIndex(2)
+        
         self.theme_combo.currentIndexChanged.connect(self.on_theme_changed)
         theme_layout.addWidget(self.theme_combo)
         layout.addLayout(theme_layout)
+        
+        # --- Interactive Color Palette ---
+        palette_group = QGroupBox("Интерактивная цветовая палитра (Акцент)")
+        palette_layout = QVBoxLayout(palette_group)
+        
+        palette_scroll = QScrollArea()
+        palette_scroll.setWidgetResizable(True)
+        palette_scroll.setFixedHeight(80)
+        palette_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        palette_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        palette_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        
+        palette_content = QWidget()
+        palette_hbox = QHBoxLayout(palette_content)
+        palette_hbox.setContentsMargins(5, 5, 5, 5)
+        palette_hbox.setSpacing(10)
+        
+        # Predefined colors for palette
+        colors = [
+            "#3498db", "#2ecc71", "#e74c3c", "#f1c40f", "#9b59b6", 
+            "#1abc9c", "#e67e22", "#34495e", "#f39c12", "#d35400",
+            "#c0392b", "#8e44ad", "#2980b9", "#27ae60", "#16a085"
+        ]
+        
+        self.color_btns = []
+        for color_hex in colors:
+            btn = QPushButton()
+            btn.setFixedSize(40, 40)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setStyleSheet(f"background-color: {color_hex}; border-radius: 20px; border: 2px solid transparent;")
+            btn.clicked.connect(lambda checked, c=color_hex: self.on_palette_color_selected(c))
+            palette_hbox.addWidget(btn)
+            self.color_btns.append(btn)
+            
+        palette_hbox.addStretch()
+        palette_scroll.setWidget(palette_content)
+        palette_layout.addWidget(palette_scroll)
+        
+        # Current color preview and custom hex input
+        preview_row = QHBoxLayout()
+        preview_row.addWidget(QLabel("Выбранный акцент:"))
+        self.color_preview = QFrame()
+        self.color_preview.setFixedSize(24, 24)
+        self.color_preview.setStyleSheet(f"background-color: {self.data_manager.get_setting('accent_color', '#3498db')}; border-radius: 12px;")
+        preview_row.addWidget(self.color_preview)
+        
+        self.hex_input = QLineEdit()
+        self.hex_input.setPlaceholderText("#HEX")
+        self.hex_input.setFixedWidth(80)
+        self.hex_input.setText(self.data_manager.get_setting("accent_color", "#3498db"))
+        self.hex_input.textChanged.connect(self.on_palette_color_selected)
+        preview_row.addWidget(self.hex_input)
+        preview_row.addStretch()
+        palette_layout.addLayout(preview_row)
+        
+        layout.addWidget(palette_group)
+        
+        # --- Header Customization Section ---
+        header_group = QGroupBox("Персонализация заголовка")
+        header_group_layout = QVBoxLayout(header_group)
+        header_group_layout.setSpacing(10)
+        
+        # GTA 5 RP Color
+        gta_color_layout = QHBoxLayout()
+        gta_color_layout.addWidget(QLabel("Цвет 'GTA 5 RP':"))
+        gta_color_layout.addStretch()
+        self.gta_color_input = QLineEdit()
+        self.gta_color_input.setFixedWidth(100)
+        self.gta_color_input.setPlaceholderText("#ffffff")
+        current_gta_color = self.data_manager.get_setting("header_gta_color", "#ffffff")
+        self.gta_color_input.setText(current_gta_color)
+        self.gta_color_input.textChanged.connect(self.on_header_customization_changed)
+        gta_color_layout.addWidget(self.gta_color_input)
+        header_group_layout.addLayout(gta_color_layout)
+        
+        # DARGON Color
+        dargon_color_layout = QHBoxLayout()
+        dargon_color_layout.addWidget(QLabel("Цвет 'Dargon':"))
+        dargon_color_layout.addStretch()
+        self.dargon_color_input = QLineEdit()
+        self.dargon_color_input.setFixedWidth(100)
+        self.dargon_color_input.setPlaceholderText("#3b82f6")
+        current_dargon_color = self.data_manager.get_setting("header_dargon_color", "#3b82f6")
+        self.dargon_color_input.setText(current_dargon_color)
+        self.dargon_color_input.textChanged.connect(self.on_header_customization_changed)
+        dargon_color_layout.addWidget(self.dargon_color_input)
+        header_group_layout.addLayout(dargon_color_layout)
+        
+        # Show/Hide DARGON
+        show_dargon_layout = QHBoxLayout()
+        show_dargon_layout.addWidget(QLabel("Показывать логотип 'Dargon':"))
+        show_dargon_layout.addStretch()
+        self.show_dargon_toggle = ToggleSwitch()
+        current_show_dargon = self.data_manager.get_setting("header_show_dargon", True)
+        self.show_dargon_toggle.setChecked(current_show_dargon)
+        self.show_dargon_toggle.toggled.connect(self.on_header_customization_changed)
+        show_dargon_layout.addWidget(self.show_dargon_toggle)
+        header_group_layout.addLayout(show_dargon_layout)
+        
+        layout.addWidget(header_group)
         
         # --- Backup Section ---
         backup_group = QGroupBox("Резервное копирование")
@@ -641,6 +786,8 @@ class SettingsTab(QWidget):
 
         layout.addStretch()
         
+        self.update_storage_path_info()
+        
         # Version
         version_lbl = QLabel(f"Version: {VERSION}")
         version_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
@@ -655,11 +802,21 @@ class SettingsTab(QWidget):
 
     def toggle_license_visibility(self, checked):
         if checked:
-            # Refresh key from AuthManager in case it wasn't ready at init
-            if self.auth_manager and self.auth_manager.current_creds:
-                real_key = self.auth_manager.current_creds.get("key", "")
-                if real_key:
-                    self.license_input.setText(real_key)
+            # Refresh key from AuthManager
+            real_key = ""
+            if self.auth_manager:
+                # Try to get from current creds
+                if self.auth_manager.current_creds:
+                    real_key = self.auth_manager.current_creds.get("key", "")
+                
+                # If still empty, try to load from session file directly
+                if not real_key:
+                    session = self.auth_manager.load_session()
+                    if session:
+                        real_key = session.get("key", "")
+            
+            if real_key:
+                self.license_input.setText(real_key)
             
             self.license_input.setEchoMode(QLineEdit.EchoMode.Normal)
             self._set_eye_icon(self.toggle_license_btn, EYE_CLOSED_SVG)
@@ -677,6 +834,48 @@ class SettingsTab(QWidget):
         btn.setIcon(QIcon(pixmap))
         btn.setText("") # Clear text if any
 
+    def update_storage_path_info(self):
+        """Update storage path display and validate it."""
+        try:
+            path = self.data_manager.get_data_dir()
+            self.storage_path_input.setText(path)
+            
+            if os.path.exists(path):
+                if os.access(path, os.W_OK):
+                    self.path_status_lbl.setText("✅ Путь доступен для записи")
+                    self.path_status_lbl.setStyleSheet("color: #2ecc71; font-size: 11px;")
+                else:
+                    self.path_status_lbl.setText("⚠️ Путь доступен только для чтения")
+                    self.path_status_lbl.setStyleSheet("color: #f1c40f; font-size: 11px;")
+            else:
+                self.path_status_lbl.setText("❌ Папка не найдена")
+                self.path_status_lbl.setStyleSheet("color: #e74c3c; font-size: 11px;")
+        except Exception as e:
+            self.path_status_lbl.setText(f"❌ Ошибка проверки пути: {str(e)}")
+            self.path_status_lbl.setStyleSheet("color: #e74c3c; font-size: 11px;")
+
+    def copy_storage_path(self):
+        """Copy storage path to clipboard."""
+        path = self.storage_path_input.text()
+        if path:
+            QApplication.clipboard().setText(path)
+            old_text = self.copy_path_btn.text()
+            self.copy_path_btn.setText("Скопировано!")
+            self.copy_path_btn.setEnabled(False)
+            QTimer.singleShot(2000, lambda: self._reset_copy_btn(old_text))
+
+    def _reset_copy_btn(self, text):
+        self.copy_path_btn.setText(text)
+        self.copy_path_btn.setEnabled(True)
+
+    def open_storage_path(self):
+        """Open storage path in file explorer."""
+        path = self.storage_path_input.text()
+        if path and os.path.exists(path):
+            os.startfile(path)
+        else:
+            QMessageBox.warning(self, "Ошибка", "Не удалось открыть папку. Путь не существует.")
+
     def on_coa_toggled(self, checked):
         self.data_manager.set_setting("showCostOfAppearance", checked)
         self.data_manager.save_data()
@@ -692,7 +891,10 @@ class SettingsTab(QWidget):
         self.data_manager.data_changed.emit()
 
     def on_theme_changed(self, index):
-        theme_name = "dark" if index == 0 else "light"
+        if index == 0: theme_name = "dark"
+        elif index == 1: theme_name = "light"
+        else: theme_name = "dark_blue"
+        
         self.data_manager.set_setting("theme", theme_name)
         
         if self.main_window:
@@ -703,6 +905,51 @@ class SettingsTab(QWidget):
         self.apply_theme(t)
             
         self.update_nav_styles()
+
+    def on_palette_color_selected(self, color_hex):
+        """Update accent color and apply theme."""
+        if not color_hex.startswith("#"):
+            color_hex = "#" + color_hex
+            
+        if len(color_hex) != 7:
+            return # Invalid hex
+            
+        self.data_manager.set_setting("accent_color", color_hex)
+        self.data_manager.save_data()
+        
+        # Update UI preview
+        self.color_preview.setStyleSheet(f"background-color: {color_hex}; border-radius: 12px;")
+        if self.hex_input.text().lower() != color_hex.lower():
+            self.hex_input.setText(color_hex)
+            
+        # Apply styles globally
+        if self.main_window:
+            self.main_window.apply_styles()
+            
+        # Update current tab UI
+        current_theme_name = self.data_manager.get_setting("theme", "dark")
+        t = StyleManager.get_theme(current_theme_name)
+        self.apply_theme(t)
+
+    def on_header_customization_changed(self):
+        """Update header colors and visibility."""
+        gta_color = self.gta_color_input.text()
+        dargon_color = self.dargon_color_input.text()
+        show_dargon = self.show_dargon_toggle.isChecked()
+        
+        # Basic hex validation
+        if not gta_color.startswith("#"): gta_color = "#" + gta_color
+        if not dargon_color.startswith("#"): dargon_color = "#" + dargon_color
+        
+        self.data_manager.set_setting("header_gta_color", gta_color)
+        self.data_manager.set_setting("header_dargon_color", dargon_color)
+        self.data_manager.set_setting("header_show_dargon", show_dargon)
+        self.data_manager.save_data()
+        
+        # Refresh title bar if possible
+        if self.main_window and hasattr(self.main_window, 'title_bar'):
+            current_theme = self.data_manager.get_setting("theme", "dark")
+            self.main_window.title_bar.set_theme(current_theme)
 
     def on_manual_edit_toggled(self, checked):
         self.data_manager.set_setting("allowManualBalanceEdit", checked)
@@ -1228,6 +1475,218 @@ class SettingsTab(QWidget):
         layout.addWidget(self.feedback_widget)
         
         self.content_stack.addWidget(page)
+
+    # --- Page 5: Information ---
+    def create_info_page(self):
+        page = QWidget()
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setStyleSheet("background-color: transparent;")
+        
+        content = QWidget()
+        content.setObjectName("InfoContent")
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(30, 30, 30, 30)
+        content_layout.setSpacing(25)
+        
+        # 🌟 1. Dynamic Modern Header
+        header_card = QFrame()
+        header_card.setObjectName("HeaderCard")
+        header_card.setStyleSheet("""
+            #HeaderCard {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1e293b, stop:1 #0f172a);
+                border-radius: 20px;
+                border: 1px solid rgba(255, 255, 255, 0.08);
+            }
+        """)
+        header_layout = QHBoxLayout(header_card)
+        header_layout.setContentsMargins(30, 30, 30, 30)
+        
+        logo_lbl = QLabel("🐉")
+        logo_lbl.setStyleSheet("font-size: 64px;")
+        header_layout.addWidget(logo_lbl)
+        
+        title_box = QVBoxLayout()
+        title_box.setSpacing(5)
+        app_title = QLabel("GTA 5 RP Dargon")
+        app_title.setStyleSheet("font-size: 32px; font-weight: 900; color: #f59e0b; letter-spacing: 1px;")
+        title_box.addWidget(app_title)
+        
+        version_badge = QLabel("STABLE RELEASE")
+        version_badge.setStyleSheet("""
+            background-color: rgba(59, 130, 246, 0.2);
+            color: #60a5fa;
+            font-size: 12px;
+            font-weight: 800;
+            padding: 4px 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        """)
+        version_badge.setFixedWidth(130)
+        title_box.addWidget(version_badge)
+        
+        header_layout.addLayout(title_box)
+        header_layout.addStretch()
+        
+        # Quick Navigation Tool
+        nav_group = QFrame()
+        nav_group.setStyleSheet("background: rgba(255,255,255,0.03); border-radius: 12px; padding: 10px;")
+        nav_lay = QHBoxLayout(nav_group)
+        
+        for icon, target in [("📊", "Учёт"), ("🎣", "Рыбалка"), ("⏳", "Фарм"), ("🛡️", "Защита")]:
+            btn = QPushButton(icon)
+            btn.setFixedSize(40, 40)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setToolTip(f"Перейти к разделу {target}")
+            btn.setStyleSheet("QPushButton { background: transparent; font-size: 20px; border-radius: 8px; } QPushButton:hover { background: rgba(255,255,255,0.1); }")
+            nav_lay.addWidget(btn)
+        header_layout.addWidget(nav_group)
+        
+        content_layout.addWidget(header_card)
+
+        # 🗺️ 2. Grid-based Module Explorer (Responsive Mock)
+        modules_title = QLabel("🗺️ ИЕРАРХИЯ МОДУЛЕЙ СИСТЕМЫ")
+        modules_title.setStyleSheet("font-size: 16px; font-weight: 800; color: #3b82f6; margin-left: 5px;")
+        content_layout.addWidget(modules_title)
+        
+        explorer_layout = QGridLayout()
+        explorer_layout.setSpacing(20)
+        
+        modules = [
+            ("📊 Финансовый Учёт", "Аналитика доходов и расходов, графики окупаемости бизнеса, экспорт в CSV.", "#3b82f6"),
+            ("🎣 Система Рыбалки", "Автоматические таймеры клёва, база цен на улов, расчет износа снаряжения.", "#10b981"),
+            ("⛏️ Модуль Добычи", "Оптимизация маршрутов (Шахта/Порт), трекер ресурсов, калькулятор веса.", "#f59e0b"),
+            ("⏳ Фарм Battle Pass", "Интеллектуальный трекер заданий, контроль времени онлайна, уведомления.", "#ef4444"),
+            ("🛡️ Центр Защиты", "Привязка по HWID, шифрование локальных данных, облачная синхронизация.", "#8b5cf6"),
+            ("⚙️ Мастер Настройки", "Персонализация интерфейса, выбор цветовых схем, управление путями.", "#64748b")
+        ]
+        
+        for i, (m_title, m_desc, m_color) in enumerate(modules):
+            m_card = QFrame()
+            m_card.setStyleSheet(f"""
+                QFrame {{
+                    background-color: #1e293b;
+                    border-radius: 16px;
+                    border: 1px solid rgba(255, 255, 255, 0.05);
+                    padding: 20px;
+                }}
+                QFrame:hover {{
+                    border: 1px solid {m_color};
+                    background-color: #24334d;
+                }}
+            """)
+            m_lay = QVBoxLayout(m_card)
+            m_lay.setSpacing(10)
+            
+            t_lbl = QLabel(m_title)
+            t_lbl.setStyleSheet(f"font-weight: 800; color: #f1f5f9; font-size: 16px;")
+            m_lay.addWidget(t_lbl)
+            
+            d_lbl = QLabel(m_desc)
+            d_lbl.setStyleSheet("color: #94a3b8; font-size: 13px; line-height: 140%;")
+            d_lbl.setWordWrap(True)
+            m_lay.addWidget(d_lbl)
+            
+            # Action Footer
+            footer = QHBoxLayout()
+            copy_btn = QPushButton("Копировать")
+            copy_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            copy_btn.setStyleSheet(f"color: {m_color}; font-weight: 700; border: none; background: transparent;")
+            copy_btn.clicked.connect(lambda checked, text=m_desc: QApplication.clipboard().setText(text))
+            footer.addStretch()
+            footer.addWidget(copy_btn)
+            m_lay.addLayout(footer)
+            
+            explorer_layout.addWidget(m_card, i // 2, i % 2)
+            
+        content_layout.addLayout(explorer_layout)
+
+        # 📖 3. Interactive Help & Navigation
+        help_card = QFrame()
+        help_card.setStyleSheet("background: #0f172a; border-radius: 16px; padding: 20px;")
+        help_lay = QHBoxLayout(help_card)
+        
+        msg_lbl = QLabel("Нужна помощь в освоении системы?")
+        msg_lbl.setStyleSheet("font-weight: 700; color: #f8fafc; font-size: 15px;")
+        help_lay.addWidget(msg_lbl)
+        help_lay.addStretch()
+        
+        faq_btn = QPushButton("Открыть FAQ")
+        faq_btn.setFixedSize(140, 40)
+        faq_btn.setStyleSheet("background: #3b82f6; color: white; font-weight: 800; border-radius: 10px;")
+        faq_btn.clicked.connect(self.show_faq)
+        help_lay.addWidget(faq_btn)
+        
+        content_layout.addWidget(help_card)
+        
+        # Footer
+        footer_lbl = QLabel(f"MoneyTracker Modern UI • 2026 • Build 1.0.0")
+        footer_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        footer_lbl.setStyleSheet("color: #475569; font-size: 11px; margin-top: 10px;")
+        content_layout.addWidget(footer_lbl)
+        
+        scroll.setWidget(content)
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+        page_layout.addWidget(scroll)
+        self.content_stack.addWidget(page)
+
+    def show_changelog(self):
+        msg = f"""<b>История обновлений {VERSION}:</b><br><br>
+        • 🚀 Полностью обновлен интерфейс настроек связи<br>
+        • 🛠️ Исправлена видимость стрелок в темной теме (Фарм БП)<br>
+        • 🛡️ Расширена панель администратора (Мониторинг ПК, SMS Центр)<br>
+        • 📖 Улучшен раздел информации и документации<br>
+        • 🔗 Добавлена интеграция с Discord Webhook для отчетов<br>
+        • 📂 Добавлено отображение абсолютных путей сохранения"""
+        QMessageBox.information(self, "Чейнджлог", msg)
+
+    def show_faq(self):
+        faq = """<b>FAQ - Часто задаваемые вопросы:</b><br><br>
+        <b>Q: Как изменить тему оформления?</b><br>
+        A: Перейдите в Настройки -> Основные -> Тема оформления.<br><br>
+        <b>Q: Где хранятся мои данные?</b><br>
+        A: Путь к данным указан во вкладке 'Основные' в блоке 'Путь к данным'.<br><br>
+        <b>Q: Как сбросить HWID?</b><br>
+        A: Обратитесь в поддержку через вкладку 'Связь'.<br><br>
+        <b>Q: Бот не нажимает клавиши, что делать?</b><br>
+        A: Запустите программу от имени администратора."""
+        QMessageBox.information(self, "FAQ", faq)
+
+    def _add_info_section(self, parent_layout, title, items):
+        section_frame = QFrame()
+        section_frame.setStyleSheet("""
+            QFrame {
+                background-color: #1e293b;
+                border-radius: 12px;
+                padding: 20px;
+            }
+        """)
+        section_layout = QVBoxLayout(section_frame)
+        section_layout.setSpacing(12)
+        
+        title_lbl = QLabel(title)
+        title_lbl.setStyleSheet("font-size: 18px; font-weight: bold; color: #3498db; margin-bottom: 10px;")
+        section_layout.addWidget(title_lbl)
+        
+        for name, desc in items:
+            item_layout = QHBoxLayout()
+            item_layout.setSpacing(15)
+            
+            name_lbl = QLabel(f"• {name}")
+            name_lbl.setStyleSheet("font-size: 13px; font-weight: 600; color: #f1c40f; min-width: 150px;")
+            name_lbl.setAlignment(Qt.AlignmentFlag.AlignTop)
+            
+            desc_lbl = QLabel(desc)
+            desc_lbl.setStyleSheet("font-size: 13px; color: #bdc3c7;")
+            desc_lbl.setWordWrap(True)
+            
+            item_layout.addWidget(name_lbl)
+            item_layout.addWidget(desc_lbl, stretch=1)
+            section_layout.addLayout(item_layout)
+        
+        parent_layout.addWidget(section_frame)
 
     # --- Export / Import Logic ---
     def export_profile(self):

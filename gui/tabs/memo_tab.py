@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QSpinBox, QDialog, QFileDialog, QApplication, QGraphicsOpacityEffect
 )
 from PyQt6.QtCore import Qt, QByteArray, QSize, QBuffer, QIODevice, pyqtSignal, QMimeData, QPropertyAnimation, QEasingCurve, QAbstractAnimation
-from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QTextOption, QKeySequence
+from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QTextOption, QKeySequence, QFont
 from PyQt6.QtSvg import QSvgRenderer
 import os
 import logging
@@ -44,8 +44,7 @@ class AutoResizingTextEdit(QTextEdit):
         self.min_font_size = 8
         self.textChanged.connect(self.adjust_font_size)
         
-        font = self.font()
-        font.setPointSize(self.default_font_size)
+        font = QFont("Segoe UI", max(6, self.default_font_size))
         self.setFont(font)
 
     def insertFromMimeData(self, source):
@@ -59,37 +58,29 @@ class AutoResizingTextEdit(QTextEdit):
         self.adjust_font_size()
 
     def adjust_font_size(self):
-        # Dynamic font sizing based on text length and widget width
         text = self.toPlainText()
         text_len = len(text)
         
-        # Heuristic: ratio of text length to widget width
-        # If we have a lot of text in a narrow space, shrink font
         width = self.viewport().width()
         if width <= 0: return
 
-        font = self.font()
         current_size = self.default_font_size
 
-        # Simple thresholding based on characters per (approximate) line width
-        # Assuming avg char width is ~8px at size 11
         chars_per_line = width / 8
         estimated_lines = text_len / chars_per_line if chars_per_line > 0 else 1
 
-        if estimated_lines > 10: # If it looks like > 10 lines
+        if estimated_lines > 10:
             current_size = 9
         elif estimated_lines > 5:
             current_size = 10
-        elif text_len > 300: # Fallback to absolute length
+        elif text_len > 300:
             current_size = 8
         elif text_len > 150:
             current_size = 10
 
-        # Ensure valid point size (> 0)
         final_size = int(max(6, current_size))
-        if final_size > 0:
-            font.setPointSize(final_size)
-            self.setFont(font)
+        font = QFont("Segoe UI", final_size)
+        self.setFont(font)
         
         # Auto-resize height
         doc_height = self.document().size().height()
@@ -302,8 +293,10 @@ class MemoSection(QFrame):
         
         # Table
         self.table = QTableWidget()
+        self.table.setFont(QFont("Segoe UI", 12))
         self.table.setColumnCount(len(self.headers))
         self.table.setHorizontalHeaderLabels(self.headers)
+        self.table.horizontalHeader().setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         # Try to make first column fit contents if it's small (like "No")
         if len(self.headers) > 0:
