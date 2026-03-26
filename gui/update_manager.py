@@ -486,49 +486,35 @@ class UpdateManager(QObject):
         
         # Determine updater path
         updater_path = None
+        exe_dir = os.path.dirname(current_exe) if getattr(sys, 'frozen', False) else os.getcwd()
+        
+        # Search paths in order of priority
+        search_paths = []
         
         if getattr(sys, 'frozen', False):
-             # If compiled
-             meipass = getattr(sys, '_MEIPASS', '')
-             
-             # 1. Check for bundled updater.exe in _MEIPASS (extracted alongside main exe)
-             bundled_updater = os.path.join(meipass, 'updater.exe')
-             
-             # 2. Try to find/use updater.py if it was bundled (running via python)
-             bundled_py = os.path.join(meipass, 'updater.py')
-             
-             # 3. Check for external updater.exe (next to main exe)
-             exe_dir = os.path.dirname(current_exe)
-             ext_exe = os.path.join(exe_dir, 'updater.exe')
-             
-             if os.path.exists(bundled_updater):
-                 updater_path = bundled_updater
-                 log(f"Found bundled updater.exe: {updater_path}")
-             elif os.path.exists(bundled_py):
-                 updater_path = bundled_py
-                 log(f"Found bundled updater.py: {updater_path}")
-             elif os.path.exists(ext_exe):
-                 updater_path = ext_exe
-                 log(f"Found external updater.exe: {updater_path}")
-             else:
-                 log(f"Updater not found. Searched: bundled_updater={bundled_updater}, bundled_py={bundled_py}, ext_exe={ext_exe}")
+            meipass = getattr(sys, '_MEIPASS', '')
+            # 1. Same directory as running exe (most important - this is where updater.exe should be for updates)
+            search_paths.append(os.path.join(exe_dir, 'updater.exe'))
+            # 2. Bundled in _MEIPASS
+            search_paths.append(os.path.join(meipass, 'updater.exe'))
+            search_paths.append(os.path.join(meipass, 'updater.py'))
+            # 3. Fallback paths
+            search_paths.append(os.path.join(os.getcwd(), 'updater.exe'))
+            search_paths.append(os.path.join(os.getcwd(), 'updater.py'))
         else:
-            # If dev, look for updater.py in root (cwd)
-            updater_path = os.path.join(os.getcwd(), 'updater.py')
-            log(f"Dev mode: checking for {updater_path}")
+            # Dev mode
+            search_paths.append(os.path.join(os.getcwd(), 'updater.py'))
+            search_paths.append(os.path.join(os.getcwd(), 'updater.exe'))
         
-        # EMERGENCY FALLBACK: If nothing found, try to locate updater.py in same dir as current script
-        if not updater_path or not os.path.exists(updater_path):
-            curr_dir = os.path.dirname(os.path.abspath(__file__))
-            root_dir = os.path.dirname(curr_dir)
-            alt_path_py = os.path.join(root_dir, 'updater.py')
-            alt_path_exe = os.path.join(root_dir, 'updater.exe')
-            if os.path.exists(alt_path_exe):
-                updater_path = alt_path_exe
-                log(f"Fallback: Found updater.exe in root: {updater_path}")
-            elif os.path.exists(alt_path_py):
-                updater_path = alt_path_py
-                log(f"Fallback: Found updater.py in root: {updater_path}")
+        # Try to find the first existing updater
+        for path in search_paths:
+            if os.path.exists(path):
+                updater_path = path
+                log(f"Found updater at: {updater_path}")
+                break
+        
+        if not updater_path:
+            log(f"Updater not found. Searched paths: {search_paths}")
 
         log(f"Final Resolved updater path: {updater_path}")
         
@@ -537,6 +523,22 @@ class UpdateManager(QObject):
              log(f"FATAL ERROR: {error_msg}")
              self.update_error.emit(f"{error_msg}\nЛог: {log_file}")
              return
+
+        # If updater is in _MEIPASS (temp folder), copy it to exe_dir for reliability
+        if getattr(sys, 'frozen', False) and 'temp' in updater_path.lower() or '_mei' in updater_path.lower():
+            meipass = getattr(sys, '_MEIPASS', '')
+            bundled_updater = os.path.join(meipass, 'updater.exe')
+            target_updater = os.path.join(exe_dir, 'updater.exe')
+            
+            if os.path.exists(bundled_updater) and not os.path.exists(target_updater):
+                try:
+                    import shutil as sh
+                    sh.copy2(bundled_updater, target_updater)
+                    log(f"Copied updater from _MEIPASS to: {target_updater}")
+                    updater_path = target_updater
+                except Exception as e:
+                    log(f"Failed to copy updater: {e}")
+                    # Continue with original path
 
         # Pass current_exe as absolute path just in case
         current_exe = os.path.abspath(current_exe)
