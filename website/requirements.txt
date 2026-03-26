@@ -9,3 +9,4 @@ Werkzeug>=3.0.1
 firebase-admin>=6.5.0
 firebase-functions>=0.1.0
 flask-login>=0.6.3
+Flask-SocketIO>=5.3.6
