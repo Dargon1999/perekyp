@@ -199,20 +199,19 @@ class UpdateManager(QObject):
         self.data_manager.set_global_data("client_id", client_id)
 
         # Get Username (Login OR Profile Name)
-        username = "Unknown"
-        if self.auth_manager and self.auth_manager.current_creds:
-             username = self.auth_manager.current_creds.get("login", "Unknown")
+        username = "Vasiliy Dargon" # Default as requested
         
-        # Fallback to Profile Name if login is Unknown
+        if self.auth_manager and self.auth_manager.current_creds:
+             login = self.auth_manager.current_creds.get("login")
+             if login and login != "Unknown":
+                 username = login
+        
+        # Fallback to Profile Name if login is still Unknown
         if username == "Unknown" and self.data_manager:
             profile = self.data_manager.get_active_profile()
-            if profile and profile.get("name"):
+            if profile and profile.get("name") and profile["name"] != "Unknown":
                 username = profile["name"]
                 
-        # Final safety check for the specific user request
-        if username == "Unknown":
-            username = "Vasiliy Dargon"
-
         self.worker = UpdateWorker(url, client_id, self.current_version, username, is_manual=is_manual)
         self.worker.check_finished.connect(self.on_check_finished)
         self.worker.start()
