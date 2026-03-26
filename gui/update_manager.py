@@ -398,6 +398,11 @@ class UpdateManager(QObject):
                 self.update_error.emit("URL загрузки не найден!")
                 return
 
+            # Validate URL
+            if not download_url.startswith(('http://', 'https://')):
+                self.update_error.emit(f"Некорректный URL загрузки: {download_url}")
+                return
+                
             print(f"Downloading update from {download_url}...")
             
             # Use absolute path for update file to avoid CWD issues
@@ -433,6 +438,24 @@ class UpdateManager(QObject):
                 return
             print(f"Download failed: {result}")
             self.update_error.emit(f"Ошибка загрузки: {result}")
+            return
+        
+        # Validate downloaded file - check if it's actually an executable
+        try:
+            with open(result, 'rb') as f:
+                header = f.read(2)
+                # Check for MZ header (Windows executable)
+                if header != b'MZ':
+                    # Maybe it's a PE file starting with different bytes
+                    f.seek(0)
+                    all_bytes = f.read(256)
+                    # Check if it looks like an HTML error page
+                    if b'<!DOCTYPE' in all_bytes or b'<html' in all_bytes or b'Error' in all_bytes:
+                        raise Exception("Сервер вернул HTML-страницу ошибки вместо файла. Проверьте URL обновления.")
+                    raise Exception(f"Загруженный файл не является исполняемым. Заголовок: {header.hex()}")
+        except Exception as e:
+            logging.error(f"Update file validation failed: {e}")
+            self.update_error.emit(f"Ошибка проверки файла: {e}")
             return
             
         print("Download complete. Ready to restart.")
