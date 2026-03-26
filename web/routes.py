@@ -18,12 +18,12 @@ def get_server_settings():
     try:
         settings = ServerSettings.query.first()
         if not settings:
-            settings = ServerSettings(current_version="9.0.1")
+            settings = ServerSettings(current_version="1.0.0")
             db.session.add(settings)
             db.session.commit()
         # Auto-update version in DB if it's outdated
-        elif settings.current_version in ["7.1.1", "7.1.2", "7.0.0", "7.2.0", "7.2.1", "9.0.0"]:
-            settings.current_version = "9.0.1"
+        elif settings.current_version in ["7.1.1", "7.1.2", "7.0.0", "7.2.0", "7.2.1", "9.0.0", "9.0.1", "9.3.0"]:
+            settings.current_version = "1.0.0"
             db.session.commit()
         return settings
     except Exception as e:
@@ -31,7 +31,7 @@ def get_server_settings():
         # Return a dummy object if DB is read-only or fails
         # We need an object with attributes: current_version, force_update
         class DummySettings:
-            current_version = "9.0.1"
+            current_version = "1.0.0"
             force_update = False
         return DummySettings()
 
