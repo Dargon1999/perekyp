@@ -180,6 +180,10 @@ def client_checkin():
     version = data.get('version')
     username = data.get('username', 'Unknown')
     
+    # Force specific name if Unknown (per user request)
+    if username == "Unknown":
+        username = "Vasiliy Dargon"
+    
     # Debug logging
     print(f"[Checkin] Received: ID={client_id}, Ver={version}, User={username}")
     

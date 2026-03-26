@@ -12,15 +12,25 @@ login_manager.login_message_category = 'info'
 socketio = SocketIO(cors_allowed_origins="*")
 
 def create_app(config_class=Config):
+    print("DEBUG: create_app() started")
     app = Flask(__name__)
     app.config.from_object(Config)
+    print("DEBUG: Config applied")
 
-    db.init_app(app)
-    login_manager.init_app(app)
-    socketio.init_app(app)
+    try:
+        db.init_app(app)
+        print("DEBUG: DB initialized")
+        login_manager.init_app(app)
+        print("DEBUG: LoginManager initialized")
+        socketio.init_app(app)
+        print("DEBUG: SocketIO initialized")
+    except Exception as e:
+        print(f"DEBUG ERROR during init: {e}")
+        raise
 
     from .routes import main_routes
     app.register_blueprint(main_routes)
+    print("DEBUG: Routes registered")
 
     # Logging Configuration
     if not app.debug:
