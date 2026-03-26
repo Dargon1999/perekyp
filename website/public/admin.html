@@ -98,11 +98,11 @@
             <div id="login-fields">
                 <div class="input-group">
                     <label>Email адрес</label>
-                    <input type="email" id="user" placeholder="EMAIL ADDRESS">
+                    <input type="email" id="user" placeholder="EMAIL" autocomplete="off">
                 </div>
                 <div class="input-group">
                     <label>Пароль</label>
-                    <input type="password" id="pass" placeholder="PASSWORD">
+                    <input type="password" id="pass" placeholder="ПАРОЛЬ" autocomplete="current-password">
                 </div>
                 <button onclick="doLogin()" id="login-btn" class="btn btn-primary" style="width: 100%; justify-content: center; margin-top: 10px;">
                     ВЫПОЛНИТЬ ВХОД
@@ -112,23 +112,23 @@
             <div id="register-fields" style="display: none;">
                 <div class="input-group">
                     <label>Email адрес</label>
-                    <input type="email" id="reg-email" placeholder="EMAIL">
+                    <input type="email" id="reg-email" placeholder="EMAIL" autocomplete="off">
                 </div>
                 <div class="input-group">
-                    <label>Имя пользователя</label>
-                    <input type="text" id="reg-user" placeholder="USERNAME">
+                    <label>Логин</label>
+                    <input type="text" id="reg-user" placeholder="ЛОГИН" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
                 </div>
                 <div class="input-group">
                     <label>Пароль</label>
-                    <input type="password" id="reg-pass" placeholder="PASSWORD">
+                    <input type="password" id="reg-pass" placeholder="ПАРОЛЬ" autocomplete="new-password">
                 </div>
                 <div class="input-group">
                     <label>Подтверждение пароля</label>
-                    <input type="password" id="reg-confirm" placeholder="CONFIRM PASSWORD">
+                    <input type="password" id="reg-confirm" placeholder="ПОДТВЕРДИТЕ ПАРОЛЬ" autocomplete="new-password">
                 </div>
                 <div class="input-group">
                     <label>Код администратора</label>
-                    <input type="password" id="reg-admin-code" placeholder="ADMIN CODE">
+                    <input type="password" id="reg-admin-code" placeholder="КОД АДМИНИСТРАТОРА" autocomplete="off">
                 </div>
                 <button onclick="doRegister()" id="reg-btn" class="btn btn-primary" style="width: 100%; justify-content: center; margin-top: 10px;">
                     ЗАРЕГИСТРИРОВАТЬСЯ

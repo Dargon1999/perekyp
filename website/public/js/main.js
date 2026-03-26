@@ -112,7 +112,7 @@ const db = getFirestore(app);
     const getFallbackConfig = () => {
         return {
             "app_name": "MoneyTracker Pro",
-            "version": "9.3.0",
+            "version": "1.0.1",
             "file_size": "45.2 MB",
             "description": "Профессиональное решение для автоматизации учета финансов на базе Firebase.",
             "why_us": [
@@ -124,7 +124,7 @@ const db = getFirestore(app);
     const populateContent = (config) => {
         try {
             document.querySelectorAll('.app-version').forEach(el => {
-                el.textContent = config.version || '9.3.0';
+                el.textContent = config.version || '1.0.1';
             });
             
             const descEl = document.getElementById('app-description');

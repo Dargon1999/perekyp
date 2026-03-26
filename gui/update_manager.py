@@ -199,7 +199,7 @@ class UpdateManager(QObject):
         self.data_manager.set_global_data("client_id", client_id)
 
         # Get Username (Login OR Profile Name)
-        username = "Vasiliy Dargon" # Default as requested
+        username = "Unknown"
         
         if self.auth_manager and self.auth_manager.current_creds:
              login = self.auth_manager.current_creds.get("login")
@@ -212,6 +212,16 @@ class UpdateManager(QObject):
             if profile and profile.get("name") and profile["name"] != "Unknown":
                 username = profile["name"]
                 
+        # If still Unknown, prompt user for login (if in manual mode or first check)
+        if username == "Unknown" and is_manual:
+            from PyQt6.QtWidgets import QInputDialog
+            text, ok = QInputDialog.getText(None, "Авторизация", "Введите ваш логин для проверки обновлений:")
+            if ok and text.strip():
+                username = text.strip()
+                # Optionally save this to data_manager for future
+                if self.data_manager:
+                    self.data_manager.set_global_data("last_login_attempt", username)
+
         self.worker = UpdateWorker(url, client_id, self.current_version, username, is_manual=is_manual)
         self.worker.check_finished.connect(self.on_check_finished)
         self.worker.start()
@@ -481,21 +491,27 @@ class UpdateManager(QObject):
              # If compiled
              meipass = getattr(sys, '_MEIPASS', '')
              
-             # 1. Try to find/use updater.py if it was bundled (running via python)
+             # 1. Check for bundled updater.exe in _MEIPASS (extracted alongside main exe)
+             bundled_updater = os.path.join(meipass, 'updater.exe')
+             
+             # 2. Try to find/use updater.py if it was bundled (running via python)
              bundled_py = os.path.join(meipass, 'updater.py')
              
-             # 2. Check for external updater.exe (next to main exe)
+             # 3. Check for external updater.exe (next to main exe)
              exe_dir = os.path.dirname(current_exe)
              ext_exe = os.path.join(exe_dir, 'updater.exe')
              
-             if os.path.exists(bundled_py):
+             if os.path.exists(bundled_updater):
+                 updater_path = bundled_updater
+                 log(f"Found bundled updater.exe: {updater_path}")
+             elif os.path.exists(bundled_py):
                  updater_path = bundled_py
                  log(f"Found bundled updater.py: {updater_path}")
              elif os.path.exists(ext_exe):
                  updater_path = ext_exe
                  log(f"Found external updater.exe: {updater_path}")
              else:
-                 log("Neither bundled updater.py nor external updater.exe found.")
+                 log(f"Updater not found. Searched: bundled_updater={bundled_updater}, bundled_py={bundled_py}, ext_exe={ext_exe}")
         else:
             # If dev, look for updater.py in root (cwd)
             updater_path = os.path.join(os.getcwd(), 'updater.py')
@@ -505,9 +521,13 @@ class UpdateManager(QObject):
         if not updater_path or not os.path.exists(updater_path):
             curr_dir = os.path.dirname(os.path.abspath(__file__))
             root_dir = os.path.dirname(curr_dir)
-            alt_path = os.path.join(root_dir, 'updater.py')
-            if os.path.exists(alt_path):
-                updater_path = alt_path
+            alt_path_py = os.path.join(root_dir, 'updater.py')
+            alt_path_exe = os.path.join(root_dir, 'updater.exe')
+            if os.path.exists(alt_path_exe):
+                updater_path = alt_path_exe
+                log(f"Fallback: Found updater.exe in root: {updater_path}")
+            elif os.path.exists(alt_path_py):
+                updater_path = alt_path_py
                 log(f"Fallback: Found updater.py in root: {updater_path}")
 
         log(f"Final Resolved updater path: {updater_path}")

@@ -3,8 +3,9 @@ from PyQt6.QtWidgets import (
     QMessageBox, QFrame, QButtonGroup, QLabel, QApplication, QScrollArea,
     QSystemTrayIcon, QMenu
 )
-from PyQt6.QtCore import Qt, QTimer, QSize, QPropertyAnimation, QEasingCurve, QParallelAnimationGroup, QPoint, QThread, pyqtSignal, pyqtProperty
-from PyQt6.QtGui import QGuiApplication, QIcon, QAction, QCloseEvent, QShortcut, QKeySequence, QPainter, QColor, QBrush, QLinearGradient
+from PyQt6.QtCore import Qt, QTimer, QSize, QPropertyAnimation, QEasingCurve, QParallelAnimationGroup, QPoint, QThread, pyqtSignal, pyqtProperty, QByteArray
+from PyQt6.QtGui import QGuiApplication, QIcon, QAction, QCloseEvent, QShortcut, QKeySequence, QPainter, QColor, QBrush, QLinearGradient, QPixmap
+from PyQt6.QtSvg import QSvgRenderer
 import os
 import logging
 import traceback
@@ -13,6 +14,65 @@ from data_manager import DataManager
 from database_manager import DatabaseManager
 from plugin_manager import PluginManager
 from gui.widgets.timeline_widget import TimelineWidget
+
+
+class IconCache:
+    """Robust icon caching and loading system."""
+    _cache = {}
+    _icon_cache = {}
+    
+    @classmethod
+    def get_icon(cls, path, size=24):
+        """Get icon from cache or load and cache it."""
+        cache_key = f"{path}:{size}"
+        
+        if cache_key in cls._icon_cache:
+            return cls._icon_cache[cache_key]
+        
+        icon = cls._load_icon(path, size)
+        cls._icon_cache[cache_key] = icon
+        return icon
+    
+    @classmethod
+    def _load_icon(cls, path, size=24):
+        """Load icon with multiple fallback strategies."""
+        try:
+            # Strategy 1: Direct QIcon from file
+            if path and os.path.exists(path):
+                ext = os.path.splitext(path)[1].lower()
+                
+                if ext in ['.svg']:
+                    # SVG: Render to pixmap
+                    try:
+                        renderer = QSvgRenderer(path)
+                        if renderer.isValid():
+                            pixmap = QPixmap(size, size)
+                            pixmap.fill(Qt.GlobalColor.transparent)
+                            painter = QPainter(pixmap)
+                            renderer.render(painter)
+                            painter.end()
+                            icon = QIcon(pixmap)
+                            if not icon.isNull():
+                                logging.debug(f"Icon loaded successfully: {path}")
+                                return icon
+                    except Exception as e:
+                        logging.warning(f"SVG rendering failed for {path}: {e}")
+                
+                # Try direct QIcon for PNG/ICO
+                try:
+                    icon = QIcon(path)
+                    if not icon.isNull():
+                        logging.debug(f"Icon loaded via QIcon: {path}")
+                        return icon
+                except Exception as e:
+                    logging.warning(f"QIcon loading failed for {path}: {e}")
+            
+            logging.debug(f"Icon not found or invalid: {path}")
+            
+        except Exception as e:
+            logging.warning(f"Icon loading failed for {path}: {e}")
+        
+        return QIcon()  # Return empty icon as fallback
 from utils import resource_path
 from gui.title_bar import CustomTitleBar
 from gui.custom_dialogs import StyledDialogBase, AlertDialog, UpdateConfirmDialog, UpdateProgressDialog
@@ -33,7 +93,18 @@ class NavButton(QPushButton):
         self.update_display(collapsed=False)
 
     def update_display(self, collapsed):
-        is_file = isinstance(self.icon_char, str) and (self.icon_char.endswith('.svg') or self.icon_char.endswith('.png')) or os.path.exists(str(self.icon_char))
+        # Check if icon_char is a valid file path
+        is_file = False
+        icon_path = None
+        if isinstance(self.icon_char, str):
+            # Check for file extensions
+            if self.icon_char.endswith('.svg') or self.icon_char.endswith('.png') or self.icon_char.endswith('.ico'):
+                icon_path = self.icon_char
+                is_file = os.path.exists(icon_path)
+            # Also check if the path exists (might be full path)
+            elif os.path.exists(self.icon_char):
+                icon_path = self.icon_char
+                is_file = True
         
         if collapsed:
             # Center content, remove padding to prevent clipping, increase font for emojis
@@ -47,9 +118,10 @@ class NavButton(QPushButton):
                 }
             """)
             
-            if is_file:
+            if is_file and icon_path:
                 self.setText("")
-                self.setIcon(QIcon(self.icon_char))
+                icon = IconCache.get_icon(icon_path, 24)
+                self.setIcon(icon)
                 self.setIconSize(QSize(24, 24))
             else:
                 self.setIcon(QIcon())
@@ -59,9 +131,10 @@ class NavButton(QPushButton):
             # Restore global styles
             self.setStyleSheet("")
             
-            if is_file:
+            if is_file and icon_path:
                 self.setText(f"   {self.original_text}")
-                self.setIcon(QIcon(self.icon_char))
+                icon = IconCache.get_icon(icon_path, 24)
+                self.setIcon(icon)
                 self.setIconSize(QSize(24, 24))
             else:
                 self.setIcon(QIcon())
@@ -602,13 +675,24 @@ class MainWindow(QMainWindow):
             AlertDialog(self, "Ошибка обновления", f"Не удалось запустить обновление: {e}").exec()
             
     def apply_styles(self):
-        theme = self.data_manager.get_setting("theme", "dark")
-        self.setStyleSheet(StyleManager.get_qss(theme))
-        self.title_bar.set_theme(theme) # Ensure title bar branding is applied
-        for i in range(self.tabs.count()):
-            widget = self.tabs.widget(i)
-            if hasattr(widget, "apply_theme"):
-                widget.apply_theme(theme)
+        try:
+            theme = self.data_manager.get_setting("theme", "dark")
+            self.setStyleSheet(StyleManager.get_qss(theme))
+            self.title_bar.set_theme(theme) # Ensure title bar branding is applied
+            for i in range(self.tabs.count()):
+                widget = self.tabs.widget(i)
+                if widget and hasattr(widget, "apply_theme"):
+                    try:
+                        widget.apply_theme(theme)
+                    except Exception as e:
+                        logging.error(f"Failed to apply theme to widget {i}: {e}")
+        except Exception as e:
+            logging.error(f"Failed to apply styles: {e}")
+            # Fallback to default theme
+            try:
+                self.setStyleSheet(StyleManager.get_qss("dark"))
+            except:
+                pass
 
     def open_profiles_dialog(self):
         from gui.profile_dialog import ProfileDialog

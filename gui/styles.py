@@ -71,6 +71,7 @@ class StyleManager:
     
     @staticmethod
     def get_theme(theme_name="dark"):
+        import logging
         StyleManager._init_themes()
         theme = StyleManager._themes.get(theme_name, StyleManager._themes["dark"]).copy()
         
@@ -79,12 +80,19 @@ class StyleManager:
             from data_manager import DataManager
             dm = DataManager()
             custom_accent = dm.get_setting("accent_color")
-            if custom_accent:
-                theme["accent"] = custom_accent
-                # Derived colors (simple logic for now)
-                theme["accent_glow"] = f"rgba({int(custom_accent[1:3], 16)}, {int(custom_accent[3:5], 16)}, {int(custom_accent[5:7], 16)}, 0.3)"
-        except:
-            pass
+            if custom_accent and isinstance(custom_accent, str) and len(custom_accent) == 7:
+                # Validate hex format
+                if custom_accent.startswith("#"):
+                    try:
+                        r = int(custom_accent[1:3], 16)
+                        g = int(custom_accent[3:5], 16)
+                        b = int(custom_accent[5:7], 16)
+                        theme["accent"] = custom_accent
+                        theme["accent_glow"] = f"rgba({r}, {g}, {b}, 0.3)"
+                    except ValueError:
+                        logging.warning(f"Invalid accent color value: {custom_accent}")
+        except Exception as e:
+            logging.warning(f"Failed to load custom accent: {e}")
             
         return theme
 

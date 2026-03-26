@@ -2,6 +2,7 @@ from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton, QGraphics
 from PyQt6.QtCore import Qt, QPoint
 from PyQt6.QtGui import QColor, QIcon, QPixmap
 import os
+import logging
 from gui.styles import StyleManager
 from utils import resource_path
 
@@ -158,12 +159,17 @@ class CustomTitleBar(QWidget):
             gta_color = dm.get_setting("header_gta_color", "#ffffff")
             dargon_color = dm.get_setting("header_dargon_color", "#3b82f6")
             show_dargon = dm.get_setting("header_show_dargon", True)
-        except:
+        except Exception as e:
+            logging.warning(f"Failed to load header settings: {e}")
             gta_color = "#ffffff"
             dargon_color = "#3b82f6"
             show_dargon = True
 
-        t = StyleManager.get_theme(theme_name)
+        try:
+            t = StyleManager.get_theme(theme_name)
+        except Exception as e:
+            logging.error(f"Failed to get theme {theme_name}: {e}")
+            t = StyleManager.get_theme("dark")
         
         # Background blending
         bg_color = "transparent"
@@ -183,85 +189,109 @@ class CustomTitleBar(QWidget):
         btn_border = t['border']
         btn_text = t['text_main']
         
-        min_color = t['text_secondary']
-        min_hover = t['text_main']
-        close_color = t['text_secondary']
+        min_color = t.get('text_secondary', '#9ca3af')
+        min_hover = t.get('text_main', '#f9fafb')
+        close_color = t.get('text_secondary', '#9ca3af')
 
-        self.setStyleSheet(f"""
-            QWidget {{
-                background-color: {bg_color}; 
-                color: {title_color};
-            }}
-        """)
+        try:
+            self.setStyleSheet(f"""
+                QWidget {{
+                    background-color: {bg_color}; 
+                    color: {title_color};
+                }}
+            """)
+        except Exception as e:
+            logging.warning(f"Failed to set title bar stylesheet: {e}")
         
         # App Icon update (ensure it's visible)
-        icon_path = resource_path("icon.ico")
-        pixmap = QPixmap(icon_path)
-        if not pixmap.isNull():
-            self.icon_label.setPixmap(pixmap)
+        try:
+            icon_path = resource_path("icon.ico")
+            pixmap = QPixmap(icon_path)
+            if not pixmap.isNull():
+                self.icon_label.setPixmap(pixmap)
+        except Exception as e:
+            logging.warning(f"Failed to load app icon: {e}")
         
         # Beautiful Title with custom colors
-        dargon_html = f' <span style="color: {dargon_color}; font-style: italic;">Dargon</span>' if show_dargon else ''
-        self.title_label.setText(f'<span style="color: {gta_color};">GTA 5 RP</span>{dargon_html}')
-        self.title_label.setStyleSheet(f"font-weight: 900; font-size: 20px; font-family: 'Segoe UI', sans-serif; border: none; letter-spacing: 1px;")
+        try:
+            dargon_html = f' <span style="color: {dargon_color}; font-style: italic;">Dargon</span>' if show_dargon else ''
+            self.title_label.setText(f'<span style="color: {gta_color};">GTA 5 RP</span>{dargon_html}')
+            self.title_label.setStyleSheet(f"font-weight: 900; font-size: 20px; font-family: 'Segoe UI', sans-serif; border: none; letter-spacing: 1px;")
+        except Exception as e:
+            logging.warning(f"Failed to update title label: {e}")
         
-        self.active_profile_label.setStyleSheet(f"color: {active_profile_color}; background-color: transparent; font-weight: bold; margin-right: 10px; padding: 5px 15px; min-width: 150px; border-radius: 4px; border: 1px solid {active_profile_color};")
+        try:
+            self.active_profile_label.setStyleSheet(f"color: {active_profile_color}; background-color: transparent; font-weight: bold; margin-right: 10px; padding: 5px 15px; min-width: 150px; border-radius: 4px; border: 1px solid {active_profile_color};")
+        except Exception as e:
+            logging.warning(f"Failed to update profile label: {e}")
         
-        self.update_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: #e67e22; 
-                color: white; 
-                font-weight: bold; 
-                border-radius: 4px; 
-                padding: 5px 10px;
-                border: none;
-            }}
-            QPushButton:hover {{
-                background-color: #d35400;
-            }}
-        """)
+        try:
+            self.update_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: #e67e22; 
+                    color: white; 
+                    font-weight: bold; 
+                    border-radius: 4px; 
+                    padding: 5px 10px;
+                    border: none;
+                }}
+                QPushButton:hover {{
+                    background-color: #d35400;
+                }}
+            """)
+        except Exception as e:
+            logging.warning(f"Failed to set update_btn stylesheet: {e}")
 
-        self.profile_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {btn_bg}; 
-                border: 1px solid {btn_border}; 
-                border-radius: 4px;
-                color: {btn_text};
-                font-size: 13px;
-                font-weight: bold;
-                margin-right: 10px;
-                padding-left: 10px;
-                padding-right: 10px;
-                text-align: left;
-            }}
-            QPushButton:hover {{
-                background-color: {btn_hover};
-                border-color: {btn_border};
-            }}
-        """)
+        try:
+            self.profile_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {btn_bg}; 
+                    border: 1px solid {btn_border}; 
+                    border-radius: 4px;
+                    color: {btn_text};
+                    font-size: 13px;
+                    font-weight: bold;
+                    margin-right: 10px;
+                    padding-left: 10px;
+                    padding-right: 10px;
+                    text-align: left;
+                }}
+                QPushButton:hover {{
+                    background-color: {btn_hover};
+                    border-color: {btn_border};
+                }}
+            """)
+        except Exception as e:
+            logging.warning(f"Failed to set profile_btn stylesheet: {e}")
         
-        self.min_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                border: none;
-                color: {min_color};
-                font-size: 14px;
-            }}
-            QPushButton:hover {{
-                background-color: {btn_hover};
-                color: {title_color};
-            }}
-        """)
+        try:
+            self.min_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: transparent;
+                    border: none;
+                    color: {min_color};
+                    font-size: 14px;
+                }}
+                QPushButton:hover {{
+                    background-color: {btn_hover};
+                    color: {title_color};
+                }}
+            """)
+        except Exception as e:
+            logging.warning(f"Failed to set min_btn stylesheet: {e}")
         
-        self.close_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                border: none;
-                color: {close_color};
-                font-size: 14px;
-            }}
-            QPushButton:hover {{
-                background-color: #e74c3c;
-                color: white;
-            }}
-        """)
+        try:
+            self.close_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: transparent;
+                    border: none;
+                    color: {close_color};
+                    font-size: 14px;
+                }}
+                QPushButton:hover {{
+                    background-color: #e74c3c;
+                    color: white;
+                }}
+            """)
+        except Exception as e:
+            logging.warning(f"Failed to set close_btn stylesheet: {e}")
