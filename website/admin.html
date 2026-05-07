@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход в систему | Cyber Ledger</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: #050505;
+        }
+        .login-card {
+            background: #111;
+            padding: 40px;
+            border: 1px solid var(--primary);
+            box-shadow: var(--neon-glow);
+            width: 100%;
+            max-width: 400px;
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+        }
+        .login-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: conic-gradient(transparent, transparent, transparent, var(--primary));
+            animation: rotate 4s linear infinite;
+            z-index: -1;
+        }
+        @keyframes rotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .login-inner {
+            background: #111;
+            position: relative;
+            z-index: 1;
+        }
+        h2 {
+            color: var(--primary);
+            text-align: center;
+            margin-bottom: 30px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            text-shadow: var(--neon-glow);
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            color: var(--text-muted);
+            font-size: 12px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+        input {
+            width: 100%;
+            background: #000;
+            border: 1px solid #333;
+            color: #fff;
+            padding: 12px;
+            font-family: 'Inter', sans-serif;
+            transition: var(--transition);
+        }
+        input:focus {
+            border-color: var(--primary);
+            outline: none;
+            box-shadow: var(--neon-glow);
+        }
+        #error {
+            color: var(--accent);
+            font-size: 12px;
+            text-align: center;
+            margin-bottom: 20px;
+            display: none;
+            text-shadow: 0 0 5px var(--accent);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="bg-canvas"></canvas>
+    
+    <div class="login-card">
+        <div class="login-inner">
+            <h2>Авторизация</h2>
+            <div id="error">ДОСТУП ЗАПРЕЩЕН: НЕВЕРНЫЙ КОД</div>
+            
+            <div class="input-group">
+                <label>Идентификатор</label>
+                <input type="text" id="user" placeholder="ЛОГИН">
+            </div>
+            
+            <div class="input-group">
+                <label>Код доступа</label>
+                <input type="password" id="pass" placeholder="ПАРОЛЬ">
+            </div>
+            
+            <button onclick="doLogin()" id="login-btn" class="btn btn-primary" style="width: 100%; justify-content: center; margin-top: 10px;">
+                ВЫПОЛНИТЬ ВХОД
+            </button>
+            
+            <div style="text-align: center; margin-top: 20px;">
+                <a href="index.html" style="color: var(--text-muted); text-decoration: none; font-size: 12px; text-transform: uppercase;">Вернуться на главную</a>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/main.js"></script>
+    <script>
+        async function doLogin() {
+            const user = document.getElementById('user').value;
+            const pass = document.getElementById('pass').value;
+            const btn = document.getElementById('login-btn');
+            const error = document.getElementById('error');
+
+            if (!user || !pass) return;
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ПРОВЕРКА...';
+            error.style.display = 'none';
+
+            // Demo mode
+            if (user === 'admin' && pass === 'admin123') {
+                localStorage.setItem('admin_logged_in', 'true');
+                setTimeout(() => {
+                    window.location.href = 'dashboard.html';
+                }, 800);
+                return;
+            }
+
+            try {
+                const resp = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({username: user, password: pass})
+                });
+                const data = await resp.json();
+                if (resp.ok) {
+                    window.location.href = data.redirect || 'dashboard.html';
+                } else {
+                    error.textContent = data.msg || 'ДОСТУП ЗАПРЕЩЕН';
+                    error.style.display = 'block';
+                    btn.disabled = false;
+                    btn.textContent = 'ВЫПОЛНИТЬ ВХОД';
+                }
+            } catch (e) {
+                error.textContent = 'ОШИБКА СЕТИ. ИСПОЛЬЗУЙТЕ DEMO ДАННЫЕ.';
+                error.style.display = 'block';
+                btn.disabled = false;
+                btn.textContent = 'ВЫПОЛНИТЬ ВХОД';
+            }
+        }
+
+        // Enter key
+        document.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') doLogin();
+        });
+    </script>
+</body>
+</html>

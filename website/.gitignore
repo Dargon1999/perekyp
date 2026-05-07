@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+admin.db
+instance/
+uploads/
+backups/
+.env
+.venv/
+.pytest_cache/
+admin_activity.log

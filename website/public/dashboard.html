@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Панель управления | Cyber Ledger</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-panel: #0a0a0a;
+            --bg-sidebar: #111;
+        }
+        body {
+            display: flex;
+            background: var(--bg-panel);
+            min-height: 100vh;
+        }
+        .sidebar {
+            width: 280px;
+            background: var(--bg-sidebar);
+            border-right: 1px solid rgba(0, 242, 255, 0.2);
+            padding: 40px 20px;
+            position: fixed;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .main {
+            flex: 1;
+            margin-left: 280px;
+            padding: 40px;
+        }
+        .nav-item {
+            padding: 15px 20px;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: var(--transition);
+            border-radius: 4px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 13px;
+            letter-spacing: 1px;
+        }
+        .nav-item:hover {
+            color: var(--primary);
+            background: rgba(0, 242, 255, 0.05);
+        }
+        .nav-item.active {
+            color: #000;
+            background: var(--primary);
+            box-shadow: var(--neon-glow);
+        }
+        .card {
+            background: #111;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 30px;
+            border-radius: 4px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        h2 {
+            color: var(--primary);
+            margin-bottom: 30px;
+            text-shadow: var(--neon-glow);
+            text-transform: uppercase;
+        }
+        .editor-group {
+            margin-bottom: 25px;
+        }
+        label {
+            display: block;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            font-size: 12px;
+            letter-spacing: 1px;
+        }
+        textarea, input {
+            width: 100%;
+            background: #000;
+            border: 1px solid #333;
+            color: #fff;
+            padding: 15px;
+            font-family: inherit;
+            transition: var(--transition);
+        }
+        textarea:focus, input:focus {
+            border-color: var(--primary);
+            outline: none;
+            box-shadow: var(--neon-glow);
+        }
+        .why-us-item {
+            background: #0a0a0a;
+            border: 1px solid #222;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        }
+        .media-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        /* Media Specific */
+        .upload-area {
+            border: 2px dashed #333;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: var(--transition);
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .upload-area.dragover {
+            border-color: var(--primary);
+            background: rgba(0, 242, 255, 0.1);
+            box-shadow: var(--neon-glow);
+        }
+        .media-item {
+            position: relative;
+            aspect-ratio: 16/9;
+            border: 1px solid #333;
+            overflow: hidden;
+            background: #000;
+            transition: var(--transition);
+            border-radius: 4px;
+        }
+        .media-item:hover {
+            border-color: var(--primary);
+            transform: translateY(-5px);
+        }
+        .media-item img { width: 100%; height: 100%; object-fit: cover; opacity: 0.8; transition: 0.3s; }
+        .media-item:hover img { opacity: 1; }
+        .media-info-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            padding: 10px;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
+            font-size: 10px;
+            color: #fff;
+            pointer-events: none;
+        }
+        .media-actions {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            background: rgba(0,0,0,0.9);
+            padding: 12px;
+            display: flex;
+            justify-content: space-around;
+            transform: translateY(100%);
+            transition: 0.3s;
+            backdrop-filter: blur(5px);
+        }
+        .media-item:hover .media-actions { transform: translateY(0); }
+        .action-btn {
+            color: #fff;
+            cursor: pointer;
+            font-size: 16px;
+            transition: 0.2s;
+        }
+        .action-btn:hover { color: var(--primary); }
+        .action-btn.del:hover { color: var(--accent); }
+        .action-btn.active { color: var(--primary); text-shadow: var(--neon-glow); }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            z-index: 3000;
+            backdrop-filter: blur(10px);
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            background: #111;
+            border: 1px solid var(--primary);
+            width: 500px;
+            padding: 40px;
+            border-radius: 4px;
+            box-shadow: var(--neon-glow);
+        }
+
+        .sw-upload-container {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .sw-btn-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            width: 100%;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #222;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+        .progress-fill {
+            height: 100%;
+            background: var(--primary);
+            width: 0%;
+            transition: width 0.3s ease;
+            box-shadow: var(--neon-glow);
+        }
+
+        @media (max-width: 768px) {
+            .sw-upload-container {
+                flex-direction: column;
+            }
+            .sidebar {
+                width: 70px;
+                padding: 20px 10px;
+            }
+            .sidebar .logo span, .sidebar .nav-item span, .sidebar .nav-item i + span {
+                display: none;
+            }
+            .main {
+                margin-left: 70px;
+                padding: 20px;
+            }
+            .modal-content {
+                width: 90%;
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Image Edit Modal -->
+    <div id="image-edit-modal" class="modal">
+        <div class="modal-content">
+            <h3 style="color: var(--primary); margin-bottom: 25px; text-transform: uppercase; letter-spacing: 1px;">Редактировать медиафайл</h3>
+            <input type="hidden" id="edit-img-id">
+            <div class="editor-group">
+                <label>Название</label>
+                <input type="text" id="edit-img-name">
+            </div>
+            <div class="editor-group">
+                <label>Описание</label>
+                <textarea id="edit-img-desc" rows="2"></textarea>
+            </div>
+            <div class="editor-group">
+                <label>Приоритет (чем выше, тем раньше в списке)</label>
+                <input type="number" id="edit-img-priority" value="0">
+            </div>
+            <div class="editor-group" style="margin-top: 20px; border-top: 1px solid #222; padding-top: 15px;">
+                <label style="color: var(--primary);">Заменить изображение (Upload New)</label>
+                <input type="file" id="replace-img-input" accept="image/*" style="font-size: 10px; background: #000; border: 1px solid #333; width: 100%; padding: 5px;">
+                <p style="font-size: 9px; color: var(--text-muted); margin-top: 5px;">Выберите новый файл, чтобы заменить текущий контент изображения, сохранив настройки.</p>
+            </div>
+            <div class="sw-btn-group">
+                <button class="btn btn-outline" onclick="closeImageModal()">Отмена</button>
+                <button class="btn btn-primary" onclick="saveImageMetadata()">Сохранить изменения</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="sidebar">
+        <div class="logo" style="margin-bottom: 20px;">
+            <i class="fas fa-wallet"></i>
+            <span>Cyber<span>Ledger</span></span>
+        </div>
+        
+        <div id="user-info" style="margin-bottom: 30px; padding: 10px; background: rgba(0,242,255,0.05); border: 1px solid rgba(0,242,255,0.1); border-radius: 4px;">
+            <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 5px;">Администратор</div>
+            <div id="admin-name-display" style="color: var(--primary); font-weight: bold; font-size: 14px; overflow: hidden; text-overflow: ellipsis;">Загрузка...</div>
+        </div>
+        <div class="nav-item active" onclick="showSection('content', event)"><i class="fas fa-edit"></i> Контент</div>
+        <div class="nav-item" onclick="showSection('media', event)"><i class="fas fa-images"></i> Медиа</div>
+        <div class="nav-item" onclick="showSection('software', event)"><i class="fas fa-sync"></i> Обновление</div>
+        <div class="nav-item" onclick="showSection('users', event)"><i class="fas fa-users"></i> Пользователи</div>
+        <div class="nav-item" onclick="showSection('cleanup', event)"><i class="fas fa-broom"></i> Очистка</div>
+        
+        <div style="margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 20px;">
+            <a href="index.html" class="nav-item" style="text-decoration: none;"><i class="fas fa-arrow-left"></i> На сайт</a>
+        </div>
+        
+        <div style="margin-top: auto;">
+            <div class="nav-item" style="color: var(--accent);" onclick="logout()"><i class="fas fa-power-off"></i> Выход</div>
+        </div>
+    </div>
+
+    <div class="main">
+        <!-- Content Section -->
+        <div id="section-content" class="card">
+            <h2>Управление контентом</h2>
+            <div class="editor-group">
+                <label>Описание системы</label>
+                <textarea id="edit-desc" rows="3"></textarea>
+            </div>
+            
+            <div class="editor-group">
+                <label>Почему выбирают нас</label>
+                <div id="why-us-editor"></div>
+                <button class="btn btn-outline" style="margin-top: 15px; width: 100%;" onclick="addWhyUsItem()">+ Добавить модуль</button>
+            </div>
+
+            <div class="editor-group">
+                <label>Кнопка скачивания</label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <input type="text" id="edit-dl-text" placeholder="Текст кнопки">
+                    <input type="text" id="edit-dl-url" placeholder="URL файла (.exe)">
+                </div>
+            </div>
+
+            <div class="editor-group" style="margin-top: 40px; border-top: 1px solid #222; padding-top: 30px;">
+                <label>Привязка изображений (Placement)</label>
+                <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 15px;">Укажите, какие изображения из библиотеки должны отображаться в конкретных блоках сайта.</p>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
+                    <div style="background: #0a0a0a; border: 1px solid #222; padding: 15px;">
+                        <label>Главный Hero-экран</label>
+                        <select id="map-hero" onchange="updateMapping('hero', this.value)"></select>
+                    </div>
+                    <div style="background: #0a0a0a; border: 1px solid #222; padding: 15px;">
+                        <label>Фон раздела Скачивания</label>
+                        <select id="map-download" onchange="updateMapping('download', this.value)"></select>
+                    </div>
+                </div>
+                
+                <label style="margin-top: 20px; display: block;">Интерфейс системы (Скриншоты)</label>
+                <div id="screenshots-mapping" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; margin-top: 10px;">
+                    <!-- Динамические селекторы скриншотов -->
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 15px;">
+                    <button class="btn btn-outline" style="flex: 2; border-style: dashed;" onclick="addScreenshotSlot()">
+                        <i class="fas fa-plus"></i> ДОБАВИТЬ СКРИНШОТ
+                    </button>
+                    <button id="download-screenshots-btn" class="btn btn-outline" style="flex: 1; border-color: var(--primary); color: var(--primary);" onclick="downloadScreenshotsArchive()">
+                        <i class="fas fa-download"></i> СКАЧАТЬ ВСЕ (ZIP)
+                    </button>
+                </div>
+            </div>
+            
+            <button class="btn btn-primary" style="margin-top: 30px; width: 100%;" onclick="saveConfig()">Опубликовать в сеть</button>
+        </div>
+
+        <!-- Media Section -->
+        <div id="section-media" class="card" style="display: none;">
+            <h2>Медиа-библиотека</h2>
+            <div id="drop-zone" class="upload-area">
+                <i class="fas fa-cloud-upload-alt" style="font-size: 40px; color: var(--primary);"></i>
+                <p style="margin-top: 15px;">Перетащите фотографии или кликните для выбора</p>
+                <p style="font-size: 10px; color: var(--text-muted);">PNG, JPG, WEBP (MAX 30MB)</p>
+                <input type="file" id="img-input" hidden multiple accept="image/*">
+            </div>
+
+            <div id="upload-progress-box" style="display: none; margin-top: 20px; background: rgba(0,0,0,0.3); padding: 15px; border: 1px solid #222;">
+                <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase;">
+                    <span id="uploading-status">ПОДГОТОВКА...</span>
+                    <span id="uploading-counter">0 / 0</span>
+                </div>
+                <div style="font-size: 11px; color: #fff; margin-bottom: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" id="uploading-filename">file.jpg</div>
+                <div class="progress-bar" style="height: 6px;">
+                    <div id="upload-progress-fill" class="progress-fill"></div>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+                    <span id="uploading-percent" style="font-size: 12px; font-weight: bold; color: var(--primary);">0%</span>
+                    <button class="btn btn-outline" style="padding: 4px 10px; font-size: 10px; border-color: var(--accent); color: var(--accent);" onclick="cancelUploads()">ОТМЕНИТЬ ВСЕ</button>
+                </div>
+            </div>
+
+            <div class="media-grid" id="media-list">
+                <!-- Сюда будут подгружаться фото -->
+            </div>
+        </div>
+
+        <!-- Software Section -->
+        <div id="section-software" class="card" style="display: none;">
+            <h2>Управление версиями ПО</h2>
+            
+            <div class="editor-group" style="margin-bottom: 30px; background: rgba(0,242,255,0.03); padding: 20px; border: 1px solid rgba(0,242,255,0.1);">
+                <label style="color: var(--primary); font-weight: bold;">1. УКАЖИТЕ ВЕРСИЮ И ОПИСАНИЕ</label>
+                <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 10px; margin-top: 10px;">
+                    <input type="text" id="sw-edit-version" placeholder="Напр: 9.3.5" onchange="syncVersion(this.value)">
+                    <input type="text" id="sw-edit-version-desc" placeholder="Краткое описание изменений (что нового?)" onchange="syncVersionDesc(this.value)">
+                </div>
+                <p style="font-size: 10px; color: var(--text-muted); margin-top: 5px;">* Версия изменится на сайте сразу после нажатия кнопки "Опубликовать изменения" ниже.</p>
+            </div>
+
+            <div class="editor-group" style="margin-bottom: 30px; background: rgba(255,255,255,0.03); padding: 20px; border: 1px solid #333;">
+                <label style="color: #fff; font-weight: bold;">2. ЗАГРУЗИТЕ ФАЙЛ (EXE ИЛИ ZIP)</label>
+                <div class="upload-area" id="sw-drop-zone" style="margin-top: 10px;">
+                    <i class="fas fa-file-executable" style="font-size: 40px; color: var(--primary);"></i>
+                    <p style="margin-top: 15px;" id="sw-file-name">Выберите файл или перетащите его сюда</p>
+                    <p style="font-size: 10px; color: var(--text-muted);">Максимальный размер: 30MB</p>
+                    <input type="file" id="sw-input" hidden accept=".exe,.zip">
+                </div>
+
+                <div class="sw-upload-container">
+                    <button class="btn btn-outline" style="flex: 1; justify-content: center;" onclick="document.getElementById('sw-input').click()">
+                        <i class="fas fa-file-upload"></i> ВЫБРАТЬ ФАЙЛ
+                    </button>
+                    <button id="sw-publish-btn" class="btn btn-primary" style="flex: 1; justify-content: center; opacity: 0.5; pointer-events: none;" onclick="uploadAndPublishSoftware()">
+                        <i class="fas fa-cloud-upload-alt"></i> ЗАГРУЗИТЬ И ОПУБЛИКОВАТЬ ФАЙЛ
+                    </button>
+                </div>
+            </div>
+
+            <div style="border-top: 1px solid #333; padding-top: 20px; margin-top: 20px;">
+                <button class="btn btn-primary" style="width: 100%; justify-content: center; background: linear-gradient(45deg, var(--primary), #00d2ff); border: none; box-shadow: var(--neon-glow);" onclick="saveConfig()">
+                    <i class="fas fa-globe"></i> ОПУБЛИКОВАТЬ ВСЕ ИЗМЕНЕНИЯ (ВЕРСИЮ И КОНТЕНТ)
+                </button>
+                <p style="text-align: center; font-size: 11px; color: var(--text-muted); margin-top: 10px;">Нажмите эту кнопку, чтобы версия 9.3.5 и другие текстовые правки появились на сайте.</p>
+            </div>
+            
+            <div id="sw-status" style="display: none; margin-top: 30px;">
+                <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-muted); margin-bottom: 5px; text-transform: uppercase;">
+                    <span id="sw-uploading-filename">file.exe</span>
+                    <span id="sw-uploading-percent">0%</span>
+                </div>
+                <div class="progress-bar">
+                    <div id="sw-progress" class="progress-fill"></div>
+                </div>
+                <div id="sw-log" style="margin-top: 20px; font-size: 11px; color: var(--text-muted); background: #000; padding: 10px; border: 1px solid #222; max-height: 150px; overflow-y: auto;"></div>
+                <button id="rollback-btn" class="btn btn-outline" style="margin-top: 20px; border-color: var(--accent); color: var(--accent); display: none; width: 100%;" onclick="rollback()">Откатить к предыдущей версии</button>
+            </div>
+        </div>
+
+        <!-- Users Section -->
+        <div id="section-users" class="card" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+                <h2>Активные пользователи</h2>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="user-search" placeholder="Поиск (ID, Имя, IP)..." style="width: 250px; padding: 8px 15px; font-size: 12px;" onkeyup="filterUsersTable()">
+                    <button class="btn btn-outline" onclick="loadClients()" style="padding: 8px 15px;"><i class="fas fa-sync-alt"></i></button>
+                </div>
+            </div>
+            
+            <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 13px;" id="users-table">
+                    <thead>
+                        <tr style="text-align: left; border-bottom: 1px solid #333; color: var(--text-muted); text-transform: uppercase; font-size: 10px; letter-spacing: 1px;">
+                            <th style="padding: 15px 10px;">Client ID</th>
+                            <th style="padding: 15px 10px;">LOGIN</th>
+                            <th style="padding: 15px 10px;">Имя</th>
+                            <th style="padding: 15px 10px;">HWID</th>
+                            <th style="padding: 15px 10px;">Версия</th>
+                            <th style="padding: 15px 10px;">Last Seen (UTC)</th>
+                            <th style="padding: 15px 10px;">IP Address</th>
+                            <th style="padding: 15px 10px;">Статус</th>
+                        </tr>
+                    </thead>
+                    <tbody id="users-list">
+                        <!-- Сюда будут подгружаться пользователи -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Cleanup Section -->
+        <div id="section-cleanup" class="card" style="display: none;">
+            <h2>Системная очистка (Сервер)</h2>
+            <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 30px;">Инструменты для поддержания производительности сервера и удаления временных данных.</p>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div style="background: rgba(0,242,255,0.03); border: 1px solid rgba(0,242,255,0.1); padding: 25px; border-radius: 4px;">
+                    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
+                        <i class="fas fa-memory" style="font-size: 24px; color: var(--primary);"></i>
+                        <h3 style="margin: 0; color: #fff; font-size: 16px;">Очистка ОЗУ</h3>
+                    </div>
+                    <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 20px;">Принудительное освобождение системного кэша и простаивающих страниц памяти сервера.</p>
+                    <button class="btn btn-primary" style="width: 100%;" onclick="performCleanup('ram')">Запустить очистку ОЗУ</button>
+                </div>
+                
+                <div style="background: rgba(255,255,255,0.03); border: 1px solid #333; padding: 25px; border-radius: 4px;">
+                    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
+                        <i class="fas fa-trash-alt" style="font-size: 24px; color: var(--accent);"></i>
+                        <h3 style="margin: 0; color: #fff; font-size: 16px;">Временные файлы</h3>
+                    </div>
+                    <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 20px;">Удаление временных файлов из системных директорий TEMP и кэша приложений.</p>
+                    <button class="btn btn-outline" style="width: 100%; border-color: var(--accent); color: var(--accent);" onclick="performCleanup('temp')">Очистить TEMP папки</button>
+                </div>
+            </div>
+            
+            <div id="cleanup-status" style="display: none; margin-top: 30px; padding: 15px; background: #000; border: 1px solid #222; border-radius: 4px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div class="spinner" id="cleanup-spinner" style="width: 15px; height: 15px; border: 2px solid rgba(0,242,255,0.3); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                    <span id="cleanup-msg" style="font-size: 12px; color: var(--text-muted);">Выполнение очистки...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, collection, getDocs, updateDoc, deleteDoc, serverTimestamp, query, orderBy, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+
+        const firebaseConfig = { 
+            apiKey: "AIzaSyCkuuMhAgsojUF1OslO7zSMrC3dKxoAo-U", 
+            authDomain: "perekyprp.firebaseapp.com", 
+            projectId: "perekyprp", 
+            storageBucket: "perekyprp.firebasestorage.app", 
+            messagingSenderId: "286165285193", 
+            appId: "1:286165285193:web:36d2dfb77de7e3684e8298", 
+            measurementId: "G-M18P0MG4G4" 
+        }; 
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const storage = getStorage(app);
+
+        let config = null;
+        let mediaFiles = [];
+        let selectedSoftwareFile = null;
+        let activeUploadTasks = []; // Track active uploads for cancellation
+
+        // Auth Guard
+        onAuthStateChanged(auth, (user) => {
+            if (!user) {
+                window.location.href = 'admin.html';
+            } else {
+                const nameEl = document.getElementById('admin-name-display');
+                if (nameEl) nameEl.textContent = user.displayName || user.email.split('@')[0];
+                loadData();
+                loadMedia();
+            }
+        });
+
+        // Initialize UI Event Listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            // Logout
+            const logoutBtn = document.querySelector('.nav-item[onclick="logout()"]');
+            if (logoutBtn) {
+                logoutBtn.removeAttribute('onclick');
+                logoutBtn.addEventListener('click', logout);
+            }
+
+            // Image Drop Zone
+            const dropZone = document.getElementById('drop-zone');
+            const imgInput = document.getElementById('img-input');
+            if (dropZone && imgInput) {
+                dropZone.addEventListener('click', () => imgInput.click());
+                dropZone.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    dropZone.classList.add('dragover');
+                });
+                dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+                dropZone.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    dropZone.classList.remove('dragover');
+                    if (e.dataTransfer.files.length) handleImageFiles(e.dataTransfer.files);
+                });
+                imgInput.addEventListener('change', (e) => {
+                    if (e.target.files.length) handleImageFiles(e.target.files);
+                });
+            }
+
+            // Software Drop Zone
+            const swDropZone = document.getElementById('sw-drop-zone');
+            const swInput = document.getElementById('sw-input');
+            if (swDropZone && swInput) {
+                swDropZone.addEventListener('click', () => swInput.click());
+                swDropZone.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    swDropZone.classList.add('dragover');
+                });
+                swDropZone.addEventListener('dragleave', () => swDropZone.classList.remove('dragover'));
+                swDropZone.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    swDropZone.classList.remove('dragover');
+                    if (e.dataTransfer.files.length) handleSoftwareSelect(e.dataTransfer.files[0]);
+                });
+                swInput.addEventListener('change', (e) => {
+                    if (e.target.files.length) handleSoftwareSelect(e.target.files[0]);
+                });
+            }
+        });
+
+        function handleSoftwareSelect(file) {
+            if (!file) return;
+            const filename = file.name.toLowerCase();
+            if (!filename.endsWith('.exe') && !filename.endsWith('.zip')) {
+                alert("ОШИБКА: Разрешены только файлы .EXE и .ZIP");
+                return;
+            }
+            selectedSoftwareFile = file;
+            document.getElementById('sw-file-name').textContent = `ВЫБРАНО: ${file.name} (${(file.size / (1024*1024)).toFixed(1)} MB)`;
+            const pubBtn = document.getElementById('sw-publish-btn');
+            if (pubBtn) {
+                pubBtn.style.opacity = '1';
+                pubBtn.style.pointerEvents = 'auto';
+            }
+        }
+
+        async function loadData() {
+            try {
+                const docRef = doc(db, "settings", "site_config");
+                const docSnap = await getDoc(docRef);
+                
+                if (docSnap.exists()) {
+                    config = docSnap.data();
+                } else {
+                    console.warn("Config doc not found in Firestore, creating default");
+                    const resp = await fetch('/config.json');
+                    config = await resp.json();
+                    // Create the doc in Firestore so we don't fallback next time
+                    await setDoc(docRef, config);
+                }
+                
+                const setVal = (id, val) => {
+                    const el = document.getElementById(id);
+                    if (el) el.value = val || '';
+                };
+
+                setVal('edit-desc', config.description);
+                setVal('edit-dl-text', config.download_text || 'СКАЧАТЬ ВЕРСИЮ 1.0.2');
+                setVal('edit-dl-url', config.download_url || '#');
+                
+                const version = config.version || '1.0.2';
+                const versionDesc = config.version_desc || '';
+                
+                setVal('edit-version', version);
+                setVal('edit-version-desc', versionDesc);
+                setVal('sw-edit-version', version);
+                setVal('sw-edit-version-desc', versionDesc);
+                
+                if (!config.screenshots) config.screenshots = [];
+                if (!config.placements) config.placements = { hero: '', download: '' };
+                
+                renderWhyUs();
+                renderPlacementSelectors();
+            } catch (e) {
+                console.error("Failed to load config", e);
+            }
+        }
+
+        async function saveConfig(silent = false) {
+            try {
+                if (!config) return;
+
+                const getVal = (id) => {
+                    const el = document.getElementById(id);
+                    return el ? el.value : '';
+                };
+
+                config.description = getVal('edit-desc');
+                config.download_text = getVal('edit-dl-text');
+                config.download_url = getVal('edit-dl-url');
+                config.version = getVal('edit-version');
+                config.version_desc = getVal('edit-version-desc');
+                
+                if (config.screenshots) {
+                    config.screenshots = config.screenshots.filter(s => s && s.url);
+                }
+
+                await setDoc(doc(db, "settings", "site_config"), config);
+                
+                if (!silent) alert('СИСТЕМА: Конфигурация обновлена и опубликована в Firestore');
+                loadData();
+            } catch (e) {
+                console.error("Save error:", e);
+                if (!silent) alert('ОШИБКА СОХРАНЕНИЯ: ' + e.message);
+            }
+        }
+
+        async function loadMedia() {
+            try {
+                // Modified query to avoid complex composite index if not yet created
+                // First try simple order, if fails, user needs to create index
+                const q = query(collection(db, "images"), orderBy("upload_date", "desc"));
+                const querySnapshot = await getDocs(q);
+                mediaFiles = [];
+                querySnapshot.forEach((doc) => {
+                    mediaFiles.push({ id: doc.id, ...doc.data() });
+                });
+                
+                // Client-side sorting by priority as fallback/complement
+                mediaFiles.sort((a, b) => (b.priority || 0) - (a.priority || 0));
+                
+                renderMedia();
+            } catch (e) {
+                console.error("Failed to load media", e);
+                if (e.message.includes("requires an index")) {
+                    alert("СИСТЕМА: Требуется создание индекса в консоли Firebase. Ссылка в логах.");
+                }
+            }
+        }
+
+        function openImageModal(id) {
+            const img = mediaFiles.find(f => f.id === id);
+            if (!img) return;
+            
+            document.getElementById('edit-img-id').value = img.id;
+            document.getElementById('edit-img-name').value = img.name || '';
+            document.getElementById('edit-img-desc').value = img.description || '';
+            document.getElementById('edit-img-priority').value = img.priority || 0;
+            
+            document.getElementById('image-edit-modal').style.display = 'flex';
+        }
+
+        function closeImageModal() {
+            document.getElementById('image-edit-modal').style.display = 'none';
+        }
+
+        function renderMedia() {
+            const container = document.getElementById('media-list');
+            if (!container) return;
+            
+            container.innerHTML = mediaFiles.map(file => `
+                <div class="media-item">
+                    <div class="media-info-overlay">
+                        <div style="font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${file.name}</div>
+                        <div>PRIO: ${file.priority}</div>
+                    </div>
+                    <img src="${file.preview || file.url}" alt="${file.name}">
+                    <div class="media-actions">
+                        <i class="fas fa-star action-btn" onclick="setPlacement('${file.id}', 'hero')" title="Главное фото"></i>
+                        <i class="fas fa-image action-btn" onclick="setPlacement('${file.id}', 'bg')" title="Фон"></i>
+                        <i class="fas fa-edit action-btn" onclick="openImageModal('${file.id}')" title="Редактировать"></i>
+                        <i class="fas fa-trash action-btn del" onclick="deleteMedia('${file.id}')" title="Удалить"></i>
+                    </div>
+                </div>
+            `).join('');
+            renderPlacementSelectors();
+        }
+
+        async function handleImageFiles(files) {
+            if (!auth.currentUser) {
+                alert("ОШИБКА: Вы не авторизованы. Перезайдите в систему.");
+                window.location.href = 'admin.html';
+                return;
+            }
+
+            const box = document.getElementById('upload-progress-box');
+            const fill = document.getElementById('upload-progress-fill');
+            const nameLabel = document.getElementById('uploading-filename');
+            const percentLabel = document.getElementById('uploading-percent');
+            const counterLabel = document.getElementById('uploading-counter');
+            const statusLabel = document.getElementById('uploading-status');
+
+            const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+            const MAX_SIZE = 30 * 1024 * 1024; // 30MB
+            
+            const filesArray = Array.from(files).filter(f => {
+                if (!ALLOWED_TYPES.includes(f.type)) {
+                    console.warn(`File ${f.name} skipped: Invalid type`);
+                    return false;
+                }
+                if (f.size > MAX_SIZE) {
+                    alert(`Файл ${f.name} слишком велик (макс 30MB)`);
+                    return false;
+                }
+                return true;
+            });
+
+            if (filesArray.length === 0) return;
+
+            box.style.display = 'block';
+            statusLabel.textContent = "ЗАГРУЗКА...";
+            activeUploadTasks = [];
+
+            for (let i = 0; i < filesArray.length; i++) {
+                const file = filesArray[i];
+                nameLabel.textContent = file.name;
+                counterLabel.textContent = `${i + 1} / ${filesArray.length}`;
+                
+                const timestamp = new Date().getTime();
+                const filename = `${timestamp}_${file.name}`;
+                const storageRef = ref(storage, `images/${filename}`);
+                const uploadTask = uploadBytesResumable(storageRef, file);
+                
+                activeUploadTasks.push(uploadTask);
+
+                await new Promise((resolve, reject) => {
+                    uploadTask.on('state_changed', 
+                        (snapshot) => {
+                            const p = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+                            fill.style.width = p + '%';
+                            percentLabel.textContent = p + '%';
+                        }, 
+                        (error) => {
+                            console.error("Upload error:", error);
+                            if (error.code === 'storage/canceled') {
+                                statusLabel.textContent = "ОТМЕНЕНО";
+                            } else {
+                                alert(`Ошибка при загрузке ${file.name}: ${error.message}`);
+                            }
+                            resolve(); // Continue to next file even on error
+                        }, 
+                        async () => {
+                            try {
+                                const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+                                await addDoc(collection(db, "images"), {
+                                    name: file.name,
+                                    filename: filename,
+                                    url: downloadURL,
+                                    preview: downloadURL,
+                                    upload_date: serverTimestamp(),
+                                    priority: 0,
+                                    size: file.size,
+                                    mimetype: file.type
+                                });
+                                resolve();
+                            } catch (e) {
+                                console.error("Firestore error:", e);
+                                resolve();
+                            }
+                        }
+                    );
+                });
+            }
+
+            statusLabel.textContent = "ЗАВЕРШЕНО";
+            fill.style.width = '100%';
+            loadMedia();
+            setTimeout(() => { 
+                if (statusLabel.textContent === "ЗАВЕРШЕНО") {
+                    box.style.display = 'none'; 
+                    fill.style.width = '0%';
+                }
+            }, 3000);
+        }
+
+        function cancelUploads() {
+            if (activeUploadTasks.length > 0) {
+                if (confirm("Отменить все текущие загрузки?")) {
+                    activeUploadTasks.forEach(task => {
+                        if (task.snapshot.state === 'running') task.cancel();
+                    });
+                    activeUploadTasks = [];
+                    document.getElementById('uploading-status').textContent = "ОТМЕНЕНО";
+                    setTimeout(() => { document.getElementById('upload-progress-box').style.display = 'none'; }, 2000);
+                }
+            }
+        }
+
+        async function deleteMedia(id) {
+            if (!confirm('Удалить это изображение?')) return;
+            try {
+                const img = mediaFiles.find(f => f.id === id);
+                if (img && img.filename) {
+                    const storageRef = ref(storage, `images/${img.filename}`);
+                    await deleteObject(storageRef).catch(e => console.warn("Storage delete failed", e));
+                }
+                await deleteDoc(doc(db, "images", id));
+                loadMedia();
+            } catch (e) {
+                alert('ОШИБКА УДАЛЕНИЯ: ' + e.message);
+            }
+        }
+
+        async function saveImageMetadata() {
+            const id = document.getElementById('edit-img-id').value;
+            const replaceInput = document.getElementById('replace-img-input');
+            const updates = {
+                name: document.getElementById('edit-img-name').value,
+                description: document.getElementById('edit-img-desc').value,
+                priority: parseInt(document.getElementById('edit-img-priority').value) || 0
+            };
+
+            try {
+                // 1. If a new file is selected for replacement
+                if (replaceInput.files.length > 0) {
+                    const file = replaceInput.files[0];
+                    const timestamp = new Date().getTime();
+                    const filename = `${timestamp}_${file.name}`;
+                    const storageRef = ref(storage, `images/${filename}`);
+                    
+                    const uploadTask = uploadBytesResumable(storageRef, file);
+                    
+                    // Show progress in the modal (simple alert/text)
+                    document.querySelector('.sw-btn-group').innerHTML = '<span style="color: var(--primary); font-size: 12px;">ЗАМЕНА ФАЙЛА...</span>';
+
+                    await new Promise((resolve, reject) => {
+                        uploadTask.on('state_changed', null, reject, async () => {
+                            const newUrl = await getDownloadURL(uploadTask.snapshot.ref);
+                            updates.url = newUrl;
+                            updates.preview = newUrl;
+                            updates.filename = filename;
+                            updates.size = file.size;
+                            updates.mimetype = file.type;
+                            resolve();
+                        });
+                    });
+                }
+
+                // 2. Update Firestore
+                await updateDoc(doc(db, "images", id), updates);
+                
+                // 3. Clear replace input
+                replaceInput.value = '';
+                
+                closeImageModal();
+                loadMedia();
+                alert("Данные успешно обновлены");
+            } catch (e) {
+                console.error("Save error:", e);
+                alert('ОШИБКА: ' + e.message);
+                // Restore buttons if failed
+                renderMedia(); // This will refresh and close modal implicitly or I can just re-render buttons
+            }
+        }
+
+        async function setPlacement(id, type) {
+            try {
+                const img = mediaFiles.find(f => f.id === id);
+                if (!img) return;
+
+                if (!config.placements) config.placements = {};
+                config.placements[type === 'hero' ? 'hero' : 'download'] = img.url;
+                
+                await saveConfig(true);
+                alert(`Изображение установлено как ${type}`);
+            } catch (e) {
+                alert('ОШИБКА: ' + e.message);
+            }
+        }
+
+        async function uploadAndPublishSoftware() {
+            if (!selectedSoftwareFile) {
+                alert("СИСТЕМА: Сначала выберите файл");
+                return;
+            }
+
+            if (!auth.currentUser) {
+                alert("ОШИБКА: Вы не авторизованы. Перезайдите в систему.");
+                window.location.href = 'admin.html';
+                return;
+            }
+
+            const status = document.getElementById('sw-status');
+            const fill = document.getElementById('sw-progress');
+            const nameLabel = document.getElementById('sw-uploading-filename');
+            const percentLabel = document.getElementById('sw-uploading-percent');
+            const logBox = document.getElementById('sw-log');
+            const version = document.getElementById('sw-edit-version').value;
+
+            // Validation
+            const filename = selectedSoftwareFile.name.toLowerCase();
+            if (!filename.endsWith('.exe') && !filename.endsWith('.zip')) {
+                alert("ОШИБКА: Разрешены только файлы .EXE и .ZIP");
+                return;
+            }
+
+            if (selectedSoftwareFile.size > 500 * 1024 * 1024) { // 500MB
+                alert("ОШИБКА: Файл слишком велик (макс. 500MB)");
+                return;
+            }
+
+            status.style.display = 'block';
+            nameLabel.textContent = selectedSoftwareFile.name;
+            logBox.innerHTML += `<div style="color: var(--primary)">[${new Date().toLocaleTimeString()}] Запуск процесса публикации v${version}...</div>`;
+
+            const storageRef = ref(storage, `software/MoneyTracker.exe`);
+            const uploadTask = uploadBytesResumable(storageRef, selectedSoftwareFile);
+
+            uploadTask.on('state_changed', 
+                (snapshot) => {
+                    const p = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+                    fill.style.width = p + '%';
+                    percentLabel.textContent = p + '%';
+                }, 
+                (error) => {
+                    console.error("SW Upload Error:", error);
+                    logBox.innerHTML += `<div style="color: var(--accent)">ОШИБКА ЗАГРУЗКИ: ${error.message}</div>`;
+                    alert("Ошибка при загрузке файла: " + error.message);
+                }, 
+                async () => {
+                    try {
+                        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+                        logBox.innerHTML += `<div style="color: var(--primary)">Файл успешно загружен в хранилище.</div>`;
+                        
+                        config.version = version;
+                        config.download_url = downloadURL;
+                        config.file_size = `${(selectedSoftwareFile.size / (1024*1024)).toFixed(1)} MB`;
+                        
+                        await saveConfig(true);
+                        
+                        logBox.innerHTML += `<div style="color: var(--primary)">[${new Date().toLocaleTimeString()}] ПУБЛИКАЦИЯ ЗАВЕРШЕНА. ВЕРСИЯ: ${version}</div>`;
+                        alert('СИСТЕМА: ПО УСПЕШНО ЗАГРУЖЕНО И ОПУБЛИКОВАНО');
+                        
+                        selectedSoftwareFile = null;
+                        document.getElementById('sw-file-name').textContent = 'Выберите файл или перетащите его сюда';
+                        document.getElementById('sw-publish-btn').style.opacity = '0.5';
+                        document.getElementById('sw-publish-btn').style.pointerEvents = 'none';
+                    } catch (e) {
+                        console.error("SW Config Update Error:", e);
+                        logBox.innerHTML += `<div style="color: var(--accent)">ОШИБКА ОБНОВЛЕНИЯ КОНФИГА: ${e.message}</div>`;
+                    }
+                }
+            );
+        }
+
+        async function logout() {
+            try {
+                // Clear any potential local data
+                localStorage.clear();
+                sessionStorage.clear();
+                
+                await signOut(auth);
+                console.log("Logged out from Firebase");
+                window.location.href = 'admin.html';
+            } catch (e) {
+                console.error("Logout error:", e);
+                window.location.href = 'admin.html';
+            }
+        }
+
+        function showSection(id, event) {
+            document.querySelectorAll('.card').forEach(c => c.style.display = 'none');
+            const target = document.getElementById('section-' + id);
+            if (target) target.style.display = 'block';
+            
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            if (event && event.currentTarget) {
+                event.currentTarget.classList.add('active');
+            }
+
+            if (id === 'users') {
+                loadClients();
+            }
+        }
+
+        async function loadClients() {
+            const list = document.getElementById('users-list');
+            if (!list) return;
+            
+            list.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px; color: var(--text-muted);">Загрузка данных...</td></tr>';
+            
+            try {
+                const response = await fetch('/api/clients');
+                if (!response.ok) throw new Error('Ошибка при загрузке данных');
+                
+                const clients = await response.json();
+                
+                if (clients.length === 0) {
+                    list.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px; color: var(--text-muted);">Нет активных пользователей</td></tr>';
+                    return;
+                }
+                
+                list.innerHTML = clients.map(c => `
+                    <tr style="border-bottom: 1px solid #222;">
+                        <td style="padding: 12px 10px; color: var(--primary); font-family: monospace;">${c.client_id}</td>
+                        <td style="padding: 12px 10px;">${c.username}</td>
+                        <td style="padding: 12px 10px;">${c.name}</td>
+                        <td style="padding: 12px 10px; font-family: monospace; font-size: 11px;">${c.hwid}</td>
+                        <td style="padding: 12px 10px;"><span style="background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;">${c.version}</span></td>
+                        <td style="padding: 12px 10px; color: var(--text-muted);">${new Date(c.last_seen).toLocaleString()}</td>
+                        <td style="padding: 12px 10px;">${c.ip}</td>
+                        <td style="padding: 12px 10px;">
+                            <span style="padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; background: ${c.status === 'Active' ? 'rgba(0,255,100,0.1)' : 'rgba(255,255,255,0.05)'}; color: ${c.status === 'Active' ? '#00ff64' : '#888'};">
+                                ${c.status}
+                            </span>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (e) {
+                console.error("Load clients error:", e);
+                list.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 20px; color: var(--accent);">Ошибка: ${e.message}</td></tr>`;
+            }
+        }
+
+        function filterUsersTable() {
+            const input = document.getElementById('user-search');
+            const filter = input.value.toLowerCase();
+            const table = document.getElementById('users-table');
+            const tr = table.getElementsByTagName('tr');
+
+            for (let i = 1; i < tr.length; i++) {
+                let found = false;
+                const td = tr[i].getElementsByTagName('td');
+                for (let j = 0; j < td.length; j++) {
+                    if (td[j]) {
+                        const txtValue = td[j].textContent || td[j].innerText;
+                        if (txtValue.toLowerCase().indexOf(filter) > -1) {
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                tr[i].style.display = found ? "" : "none";
+            }
+        }
+
+        async function performCleanup(type) {
+            const statusBox = document.getElementById('cleanup-status');
+            const msgEl = document.getElementById('cleanup-msg');
+            const spinner = document.getElementById('cleanup-spinner');
+            
+            statusBox.style.display = 'block';
+            msgEl.textContent = `Выполнение очистки ${type.toUpperCase()}...`;
+            msgEl.style.color = 'var(--text-muted)';
+            spinner.style.display = 'block';
+
+            try {
+                const response = await fetch(`/api/cleanup/${type}`, { method: 'POST' });
+                const result = await response.json();
+                
+                if (response.ok) {
+                    msgEl.textContent = result.msg;
+                    msgEl.style.color = 'var(--primary)';
+                } else {
+                    throw new Error(result.msg || 'Ошибка сервера');
+                }
+            } catch (e) {
+                console.error("Cleanup error:", e);
+                msgEl.textContent = `ОШИБКА: ${e.message}`;
+                msgEl.style.color = 'var(--accent)';
+            } finally {
+                spinner.style.display = 'none';
+                setTimeout(() => {
+                    statusBox.style.display = 'none';
+                }, 5000);
+            }
+        }
+
+        function addWhyUsItem() {
+            if (!config.why_us) config.why_us = [];
+            config.why_us.push({icon: 'fas fa-star', title: 'Новый модуль', desc: 'Описание модуля'});
+            renderWhyUs();
+        }
+
+        function renderWhyUs() {
+            const container = document.getElementById('why-us-editor');
+            if (!container || !config.why_us) return;
+            container.innerHTML = config.why_us.map((item, i) => {
+                const safeDesc = (item.desc || '').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+                return `
+                    <div class="why-us-item">
+                        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                            <input type="text" value="${item.icon}" onchange="updateWhyUsItem(${i}, 'icon', this.value)" placeholder="Icon Class">
+                            <input type="text" value="${item.title}" onchange="updateWhyUsItem(${i}, 'title', this.value)" placeholder="Title">
+                            <button class="action-btn del" onclick="removeWhyUsItem(${i})"><i class="fas fa-times"></i></button>
+                        </div>
+                        <textarea onchange="updateWhyUsItem(${i}, 'desc', this.value)" placeholder="Description">${safeDesc}</textarea>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateWhyUsItem(i, key, val) {
+            if (config.why_us[i]) config.why_us[i][key] = val;
+        }
+
+        function removeWhyUsItem(i) {
+            if (confirm('Удалить этот модуль?')) {
+                config.why_us.splice(i, 1);
+                renderWhyUs();
+            }
+        }
+
+        function syncVersion(val) {
+            const el1 = document.getElementById('edit-version');
+            const el2 = document.getElementById('sw-edit-version');
+            if (el1) el1.value = val;
+            if (el2) el2.value = val;
+        }
+
+        function syncVersionDesc(val) {
+            const el1 = document.getElementById('edit-version-desc');
+            const el2 = document.getElementById('sw-edit-version-desc');
+            if (el1) el1.value = val;
+            if (el2) el2.value = val;
+        }
+
+        function renderPlacementSelectors() {
+            const heroSelect = document.getElementById('map-hero');
+            const dlSelect = document.getElementById('map-download');
+            const screenshotsBox = document.getElementById('screenshots-mapping');
+            if (!heroSelect || !dlSelect || !screenshotsBox) return;
+            
+            const mediaOptions = mediaFiles.map(f => `<option value="${f.url}">${f.name}</option>`).join('');
+            const defaultOption = '<option value="">-- Выберите изображение --</option>';
+            const options = defaultOption + mediaOptions;
+            
+            heroSelect.innerHTML = options;
+            dlSelect.innerHTML = options;
+            
+            if (config && config.placements) {
+                heroSelect.value = config.placements.hero || '';
+                dlSelect.value = config.placements.download || '';
+            }
+
+            if (config && config.screenshots) {
+                let html = '';
+                config.screenshots.forEach((s, i) => {
+                    const currentUrl = s.url || '';
+                    html += `
+                        <div style="background: #0a0a0a; border: 1px solid #222; padding: 10px; position: relative;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                                <label style="font-size: 9px; opacity: 0.7; margin: 0;">Скриншот ${i+1}</label>
+                                <i class="fas fa-times" style="color: var(--accent); cursor: pointer; font-size: 10px;" onclick="removeScreenshotSlot(${i})"></i>
+                            </div>
+                            <select onchange="updateScreenshot(${i}, this.value)" style="padding: 5px; font-size: 10px; width: 100%; background: #000; color: #fff; border: 1px solid #333;">
+                                ${defaultOption}
+                                ${mediaFiles.map(f => `<option value="${f.url}" ${f.url === currentUrl ? 'selected' : ''}>${f.name}</option>`).join('')}
+                            </select>
+                        </div>
+                    `;
+                });
+                screenshotsBox.innerHTML = html;
+            }
+        }
+
+        function addScreenshotSlot() {
+            if (!config.screenshots) config.screenshots = [];
+            config.screenshots.push({ url: '', title: `Screenshot ${config.screenshots.length + 1}` });
+            renderPlacementSelectors();
+        }
+
+        function removeScreenshotSlot(index) {
+            if (config.screenshots && config.screenshots[index]) {
+                config.screenshots.splice(index, 1);
+                renderPlacementSelectors();
+            }
+        }
+
+        function updateScreenshot(index, val) {
+            if (!config.screenshots) config.screenshots = [];
+            if (!config.screenshots[index]) {
+                config.screenshots[index] = { url: val, title: `Screenshot ${index + 1}` };
+            } else {
+                config.screenshots[index].url = val;
+            }
+        }
+
+        function updateMapping(type, val) {
+            if (!config.placements) config.placements = {};
+            config.placements[type] = val;
+        }
+
+        async function downloadScreenshotsArchive() {
+            alert("Функция в разработке для Firebase Storage");
+        }
+
+        // Global exposing for onclick handlers
+        window.showSection = showSection;
+        window.loadClients = loadClients;
+        window.filterUsersTable = filterUsersTable;
+        window.performCleanup = performCleanup;
+        window.addWhyUsItem = addWhyUsItem;
+        window.removeWhyUsItem = removeWhyUsItem;
+        window.updateWhyUsItem = updateWhyUsItem;
+        window.addScreenshotSlot = addScreenshotSlot;
+        window.removeScreenshotSlot = removeScreenshotSlot;
+        window.updateScreenshot = updateScreenshot;
+        window.updateMapping = updateMapping;
+        window.saveConfig = saveConfig;
+        window.openImageModal = openImageModal;
+        window.closeImageModal = closeImageModal;
+        window.saveImageMetadata = saveImageMetadata;
+        window.deleteMedia = deleteMedia;
+        window.setPlacement = setPlacement;
+        window.uploadAndPublishSoftware = uploadAndPublishSoftware;
+        window.logout = logout;
+        window.syncVersion = syncVersion;
+        window.syncVersionDesc = syncVersionDesc;
+        window.downloadScreenshotsArchive = downloadScreenshotsArchive;
+        window.cancelUploads = cancelUploads;
+    </script>
+</body>
+</html>

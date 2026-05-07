@@ -1,0 +1,15 @@
+Flask>=3.0.0
+Flask-SQLAlchemy>=3.1.1
+Flask-Bcrypt>=1.0.1
+Flask-JWT-Extended>=4.6.0
+Flask-Limiter>=3.5.0
+Pillow>=10.1.0
+gunicorn>=21.2.0
+Werkzeug>=3.0.1
+firebase-admin>=6.5.0
+firebase-functions>=0.1.0
+flask-login>=0.6.3
+Flask-SocketIO>=5.3.6
+python-dotenv>=1.0.0
+eventlet>=0.33.3
+gevent>=23.9.1
