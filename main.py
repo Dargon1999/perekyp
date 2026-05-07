@@ -156,17 +156,21 @@ def main():
 
     # 3. Register F7 global hotkey for Mem Reduct Pro
     _f7_listener_started = threading.Event()
+    _stop_f7_listener = threading.Event()
+    
     def _f7_hotkey_thread():
         try:
             user32 = ctypes.windll.user32
             VK_F7 = 0x76
             WM_HOTKEY = 0x0312
-            if user32.RegisterHotKey(None, 1, 0, VK_F7):
+            HOTKEY_ID = 1
+            if user32.RegisterHotKey(None, HOTKEY_ID, 0, VK_F7):
                 _f7_listener_started.set()
                 msg = ctypes.wintypes.MSG()
-                while True:
-                    if user32.GetMessageW(ctypes.byref(msg), None, 0, 0) != 0:
-                        if msg.message == WM_HOTKEY and msg.wParam == 1:
+                while not _stop_f7_listener.is_set():
+                    # Use PeekMessage instead of GetMessage to allow checking the stop event
+                    if user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, 1): # 1 = PM_REMOVE
+                        if msg.message == WM_HOTKEY and msg.wParam == HOTKEY_ID:
                             import subprocess
                             if getattr(sys, 'frozen', False):
                                 # In EXE mode, call bundled mem_reduct.exe
@@ -188,8 +192,12 @@ def main():
                                         stdout=subprocess.DEVNULL,
                                         stderr=subprocess.DEVNULL
                                     )
-                        ctypes.windll.user32.TranslateMessage(ctypes.byref(msg))
-                        ctypes.windll.user32.DispatchMessageW(ctypes.byref(msg))
+                        user32.TranslateMessage(ctypes.byref(msg))
+                        user32.DispatchMessageW(ctypes.byref(msg))
+                    else:
+                        import time
+                        time.sleep(0.1)
+                user32.UnregisterHotKey(None, HOTKEY_ID)
             else:
                 _f7_listener_started.set()
         except:
@@ -329,10 +337,42 @@ def main():
         except Exception:
             pass
 
-        try:
-            sys.exit(app.exec())
-        except KeyboardInterrupt:
-            sys.exit(0)
+    def final_cleanup():
+        logging.info("Starting final cleanup...")
+        _stop_f7_listener.set()
+        
+        # Kill bundled mem_reduct.exe if running from temp
+        if getattr(sys, 'frozen', False):
+            try:
+                import psutil
+                current_temp = sys._MEIPASS
+                for proc in psutil.process_iter(['name', 'exe']):
+                    try:
+                        if proc.info['name'] == 'mem_reduct.exe':
+                            exe_path = proc.info['exe']
+                            if exe_path and current_temp.lower() in exe_path.lower():
+                                logging.info(f"Terminating bundled process: {exe_path}")
+                                proc.terminate()
+                                proc.wait(timeout=2)
+                    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
+                        pass
+            except ImportError:
+                # Fallback if psutil not installed (though it should be in requirements)
+                os.system('taskkill /f /im mem_reduct.exe /t >nul 2>&1')
+            except Exception as e:
+                logging.error(f"Cleanup error: {e}")
+
+    try:
+        exit_code = app.exec()
+        final_cleanup()
+        sys.exit(exit_code)
+    except KeyboardInterrupt:
+        final_cleanup()
+        sys.exit(0)
+    except Exception as e:
+        logging.error(f"App exec error: {e}")
+        final_cleanup()
+        sys.exit(1)
 
     sys.exit(0)
 
