@@ -1,0 +1,122 @@
+{
+    "profiles": [
+        {
+            "id": "20b8f733-edad-487e-8f53-c7d0ccc4f315",
+            "name": "Default Profile",
+            "created_at": "2026-01-07",
+            "starting_amount": 0.0,
+            "transactions": [
+                {
+                    "id": "13dc7722-ac6a-4d3f-a8cb-d95c58469b58",
+                    "date": "2026-01-07",
+                    "amount": 12.0,
+                    "comment": "",
+                    "item_name": "re"
+                }
+            ],
+            "settings": {
+                "theme": "dark",
+                "listing_cost": 0.0,
+                "version": "1.0.0"
+            },
+            "car_rental": {
+                "starting_amount": 0.0,
+                "transactions": [
+                    {
+                        "id": "5a2dccb2-c0b2-4ea9-baea-daf369024da9",
+                        "date": "07.01.2026",
+                        "amount": 1.0,
+                        "comment": "",
+                        "item_name": "1",
+                        "image_path": null
+                    },
+                    {
+                        "id": "f12d81b4-3b60-41c6-85ff-73cb06f11400",
+                        "date": "07.01.2026",
+                        "amount": 2.0,
+                        "comment": "",
+                        "item_name": "2",
+                        "image_path": null
+                    },
+                    {
+                        "id": "59329fc5-1604-43d1-b543-2c017cd7c76b",
+                        "date": "07.01.2026",
+                        "amount": 3.0,
+                        "comment": "",
+                        "item_name": "3",
+                        "image_path": null
+                    }
+                ]
+            },
+            "mining": {
+                "starting_amount": 0.0,
+                "transactions": [
+                    {
+                        "id": "4eaf4eec-3596-40ea-8013-ffd103d80708",
+                        "date": "07.01.2026",
+                        "amount": 11.0,
+                        "comment": "",
+                        "item_name": "1",
+                        "image_path": null
+                    }
+                ]
+            },
+            "clothes": {
+                "starting_amount": 0.0,
+                "inventory": [],
+                "sold_history": []
+            },
+            "farm_bp": {
+                "starting_amount": 0.0,
+                "transactions": []
+            },
+            "memo": [
+                {
+                    "id": "645e9fef-f040-498a-ac20-8d91407a9a5a",
+                    "title": "Уголовный Кодекс (УК)",
+                    "items": []
+                },
+                {
+                    "id": "fea50a8a-3fd2-4d7c-a474-56a7c7b5190a",
+                    "title": "Административный Кодекс (АК)",
+                    "items": []
+                }
+            ]
+        },
+        {
+            "id": "0d603bda-b593-4263-b066-6cff528ce4f0",
+            "name": "Туст",
+            "created_at": "2026-01-07",
+            "starting_amount": 0.0,
+            "transactions": [],
+            "settings": {
+                "theme": "dark",
+                "listing_cost": 0.0,
+                "version": "1.0.0"
+            },
+            "car_rental": {
+                "starting_amount": 0.0,
+                "transactions": []
+            },
+            "mining": {
+                "starting_amount": 0.0,
+                "transactions": []
+            },
+            "clothes": {
+                "starting_amount": 0.0,
+                "inventory": [],
+                "sold_history": []
+            },
+            "farm_bp": {
+                "starting_amount": 0.0,
+                "transactions": []
+            },
+            "memo": {
+                "uk": [],
+                "ak": []
+            }
+        }
+    ],
+    "active_profile_id": "20b8f733-edad-487e-8f53-c7d0ccc4f315",
+    "global": {}
+}

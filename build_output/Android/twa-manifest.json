@@ -1,0 +1,15 @@
+{
+  "name": "MoneyTracker",
+  "packageId": "com.moneytracker.app",
+  "webManifestUrl": "http://localhost:5000/static/manifest.json",
+  "launcherName": "MoneyTracker",
+  "defaultLocale": "ru",
+  "icon": "ic_launcher.png",
+  "splashScreenFadeoutDuration": 300,
+  "themeColor": "#3b82f6",
+  "backgroundColor": "#0a0e17",
+  "enableNotifications": true,
+  "isPlayBillingEnabled": false,
+  "isLocationEnabled": false,
+  "isContactSharingEnabled": false
+}

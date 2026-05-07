@@ -1,0 +1,61 @@
+{
+    "profiles": [
+        {
+            "id": "921e0e59-08a2-4a59-9dce-79a869070cfa",
+            "name": "Default Profile",
+            "created_at": "06.03.2026",
+            "starting_amount": 0.0,
+            "settings": {
+                "theme": "dark",
+                "listing_cost": 0.0,
+                "version": "9.2.0"
+            },
+            "car_rental": {
+                "transactions": []
+            },
+            "mining": {
+                "transactions": []
+            },
+            "farm_bp": {
+                "transactions": []
+            },
+            "fishing": {
+                "transactions": []
+            },
+            "clothes": {
+                "inventory": [],
+                "sold_history": []
+            },
+            "clothes_new": {
+                "inventory": [],
+                "sold_history": []
+            },
+            "cars_trade": {
+                "inventory": [],
+                "sold_history": []
+            },
+            "capital_planning": {
+                "target_amount": 0.0,
+                "target_date": null,
+                "history": [],
+                "settings": {
+                    "simplified_mode": false
+                }
+            },
+            "achievements": [],
+            "transactions": [],
+            "memo": {
+                "uk": [],
+                "ak": []
+            },
+            "fishes": []
+        }
+    ],
+    "active_profile_id": "921e0e59-08a2-4a59-9dce-79a869070cfa",
+    "_metadata": {
+        "version": "9.0.1",
+        "schema_version": 2,
+        "last_modified": "2026-03-06T23:33:02.917302",
+        "app_version": "MoneyTracker"
+    }
+}

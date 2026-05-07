@@ -1,0 +1,85 @@
+{
+  "ingredients": [
+    { "key": "frukti", "name": "Фрукты", "asset": "frukti.png" },
+    { "key": "ovoshi", "name": "Овощи", "asset": "ovoshi.png" },
+    { "key": "voda", "name": "Вода", "asset": "voda2.png" },
+    { "key": "myaso", "name": "Мясо", "asset": "myaso.png" },
+    { "key": "knife", "name": "Нож", "asset": "knife2.png" },
+    { "key": "whisk", "name": "Венчик", "asset": "whisk2.png" },
+    { "key": "fire", "name": "Огонь", "asset": "fire2.png" },
+    { "key": "start", "name": "Старт готовки", "asset": "startCoocking.png" }
+  ],
+  "recipes": [
+    {
+      "name": "Фруктовый смузи",
+      "steps": [
+        { "asset": "frukti.png", "action": "right" },
+        { "asset": "voda2.png", "action": "right" },
+        { "asset": "whisk2.png", "action": "right" },
+        { "asset": "startCoocking.png", "action": "left" }
+      ]
+    },
+    {
+      "name": "Фруктовый салат",
+      "steps": [
+        { "asset": "frukti.png", "action": "right" },
+        { "asset": "knife2.png", "action": "right" },
+        { "asset": "startCoocking.png", "action": "left" }
+      ]
+    },
+    {
+      "name": "Овощной салат",
+      "steps": [
+        { "asset": "ovoshi.png", "action": "right" },
+        { "asset": "knife2.png", "action": "right" },
+        { "asset": "startCoocking.png", "action": "left" }
+      ]
+    },
+    {
+      "name": "Овощной смузи",
+      "steps": [
+        { "asset": "ovoshi.png", "action": "right" },
+        { "asset": "voda2.png", "action": "right" },
+        { "asset": "whisk2.png", "action": "right" },
+        { "asset": "startCoocking.png", "action": "left" }
+      ]
+    },
+    {
+      "name": "Рагу",
+      "steps": [
+        { "asset": "myaso.png", "action": "right" },
+        { "asset": "ovoshi.png", "action": "right" },
+        { "asset": "voda2.png", "action": "right" },
+        { "asset": "fire2.png", "action": "right" },
+        { "asset": "startCoocking.png", "action": "left" }
+      ]
+    },
+    {
+      "name": "Мясной суп",
+      "steps": [
+        { "asset": "myaso.png", "action": "right" },
+        { "asset": "voda2.png", "action": "right" },
+        { "asset": "fire2.png", "action": "right" },
+        { "asset": "startCoocking.png", "action": "left" }
+      ]
+    },
+    {
+      "name": "Салат с мясом",
+      "steps": [
+        { "asset": "myaso.png", "action": "right" },
+        { "asset": "ovoshi.png", "action": "right" },
+        { "asset": "knife2.png", "action": "right" },
+        { "asset": "startCoocking.png", "action": "left" }
+      ]
+    },
+    {
+      "name": "Фруктовый микс",
+      "steps": [
+        { "asset": "frukti.png", "action": "right" },
+        { "asset": "knife2.png", "action": "right" },
+        { "asset": "whisk2.png", "action": "right" },
+        { "asset": "startCoocking.png", "action": "left" }
+      ]
+    }
+  ]
+}

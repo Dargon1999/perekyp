@@ -1,0 +1,17 @@
+{
+    "auto_clean_enabled": 0,
+    "auto_clean_threshold": 80,
+    "autostart": 0,
+    "minimize_to_tray": 1,
+    "show_notifications": 1,
+    "show_charts": 0,
+    "interactive_procs": 0,
+    "hotkey_enabled": true,
+    "hotkey_key": "F7",
+    "cleanup_threads": 4,
+    "cleanup_buffer_mb": 64,
+    "cleanup_dirs": [
+        "C:\\Users\\kaniv\\AppData\\Local\\Temp",
+        "C:\\WINDOWS\\Temp"
+    ]
+}

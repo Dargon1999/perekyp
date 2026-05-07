@@ -1,0 +1,10 @@
+PyQt5
+opencv-python
+numpy
+pyautogui
+pillow
+keyboard
+pynput
+mss
+pygetwindow
+vgamepad

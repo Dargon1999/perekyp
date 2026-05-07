@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#3b82f6">
+    <meta name="description" content="MoneyTracker - Система управления капиталом и перепродажами">
+    
+    <!-- PWA Meta Tags -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="MoneyTracker">
+    <meta name="application-name" content="MoneyTracker">
+    <meta name="msapplication-TileColor" content="#0a0e17">
+    <meta name="msapplication-tap-highlight" content="no">
+    
+    <!-- Favicon and Icons -->
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icons/icon-32x32.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='icons/icon-16x16.png') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192x192.png') }}">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    
+    <!-- PWA Install Prompt -->
+    <style>
+        .pwa-install-prompt {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-secondary);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 12px;
+            padding: 16px;
+            z-index: 10000;
+            display: none;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .pwa-install-prompt.show {
+            display: block;
+        }
+        
+        .pwa-install-content {
+            text-align: center;
+        }
+        
+        .pwa-install-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+        }
+        
+        .pwa-install-text {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+        }
+        
+        .pwa-install-buttons {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+        }
+        
+        .pwa-install-btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+        }
+        
+        .pwa-install-btn.primary {
+            background: var(--accent-primary);
+            color: white;
+        }
+        
+        .pwa-install-btn.secondary {
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid var(--text-secondary);
+        }
+        
+        .pwa-install-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <!-- 3D Background Container -->
+    <div id="canvas-container"></div>
+
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container navbar-content">
+            <a class="navbar-brand" href="{{ url_for('main.home') }}">Perekyp Admin</a>
+            
+            <button class="mobile-toggle" aria-label="Toggle navigation">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+
+            <div class="nav-links">
+                {% if current_user.is_authenticated %}
+                    <a class="nav-link" href="{{ url_for('main.dashboard') }}">Панель</a>
+                    <a class="nav-link" href="{{ url_for('main.sync') }}">Синхронизация</a>
+                    <a class="nav-link" href="{{ url_for('main.logout') }}">Выйти</a>
+                {% else %}
+                    <a class="nav-link" href="{{ url_for('main.login') }}">Войти</a>
+                    <a class="nav-link" href="{{ url_for('main.register') }}">Регистрация</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container main-wrapper animate-fade-in">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+        
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="{{ url_for('static', filename='js/three_bg.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    
+    <!-- PWA Service Worker Registration -->
+    <script>
+        // Check if service worker is supported
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/static/sw.js')
+                    .then(function(registration) {
+                        console.log('ServiceWorker registered with scope: ', registration.scope);
+                        
+                        // Check for updates
+                        registration.addEventListener('updatefound', function() {
+                            const newWorker = registration.installing;
+                            console.log('New service worker installing...');
+                            
+                            newWorker.addEventListener('statechange', function() {
+                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                    // New content is available
+                                    showUpdateNotification();
+                                }
+                            });
+                        });
+                    })
+                    .catch(function(error) {
+                        console.log('ServiceWorker registration failed: ', error);
+                    });
+            });
+        }
+        
+        // PWA Install Prompt
+        let deferredPrompt;
+        const pwaInstallPrompt = document.createElement('div');
+        pwaInstallPrompt.className = 'pwa-install-prompt';
+        pwaInstallPrompt.innerHTML = `
+            <div class="pwa-install-content">
+                <div class="pwa-install-title">Установить MoneyTracker</div>
+                <div class="pwa-install-text">Установите приложение для быстрого доступа и работы офлайн</div>
+                <div class="pwa-install-buttons">
+                    <button class="pwa-install-btn secondary" onclick="dismissInstallPrompt()">Позже</button>
+                    <button class="pwa-install-btn primary" onclick="installPWA()">Установить</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(pwaInstallPrompt);
+        
+        window.addEventListener('beforeinstallprompt', (e) => {
+            // Prevent the mini-infobar from appearing on mobile
+            e.preventDefault();
+            // Stash the event so it can be triggered later.
+            deferredPrompt = e;
+            
+            // Show install prompt after 3 seconds
+            setTimeout(() => {
+                if (deferredPrompt) {
+                    pwaInstallPrompt.classList.add('show');
+                }
+            }, 3000);
+        });
+        
+        function installPWA() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        console.log('User accepted the install prompt');
+                    }
+                    deferredPrompt = null;
+                    pwaInstallPrompt.classList.remove('show');
+                });
+            }
+        }
+        
+        function dismissInstallPrompt() {
+            pwaInstallPrompt.classList.remove('show');
+            deferredPrompt = null;
+        }
+        
+        // Show update notification
+        function showUpdateNotification() {
+            const updateNotification = document.createElement('div');
+            updateNotification.className = 'pwa-install-prompt show';
+            updateNotification.innerHTML = `
+                <div class="pwa-install-content">
+                    <div class="pwa-install-title">Доступно обновление</div>
+                    <div class="pwa-install-text">Обновите приложение для получения новых функций</div>
+                    <div class="pwa-install-buttons">
+                        <button class="pwa-install-btn secondary" onclick="this.parentElement.parentElement.parentElement.remove()">Позже</button>
+                        <button class="pwa-install-btn primary" onclick="location.reload()">Обновить</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(updateNotification);
+        }
+        
+        // Handle app installed event
+        window.addEventListener('appinstalled', (evt) => {
+            console.log('MoneyTracker was installed.');
+            pwaInstallPrompt.classList.remove('show');
+        });
+    </script>
+</body>
+</html>

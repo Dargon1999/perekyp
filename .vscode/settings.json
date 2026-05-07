@@ -1,0 +1,9 @@
+{
+    "terminal.integrated.profiles.windows": {
+        "MoneyTracker": {
+            "path": "powershell.exe",
+            "args": ["-NoExit", "-Command", "python main.py"]
+        }
+    },
+    "terminal.integrated.defaultProfile.windows": "MoneyTracker"
+}

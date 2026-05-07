@@ -1,0 +1,12 @@
+{
+    "F7": {
+        "action": "mem_cleanup",
+        "description": "Очистка оперативной памяти",
+        "enabled": true
+    },
+    "F8": {
+        "action": "temp_cleanup",
+        "description": "Глубокая очистка временных файлов",
+        "enabled": true
+    }
+}
