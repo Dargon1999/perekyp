@@ -744,31 +744,49 @@ def api_license_create():
     days = data.get('days', 7)
     count = data.get('count', 1)
     
+    # Validation
+    try:
+        count = int(count)
+        if count > 50: count = 50
+    except:
+        count = 1
+
     created_keys = []
     try:
-        for _ in range(count):
-            key_str = '-'.join([secrets.token_hex(2).upper() for _ in range(4)])
-            
-            doc_data = {
-                "fields": {
-                    "duration_days": {"integerValue": int(days)},
-                    "is_active": {"booleanValue": True},
-                    "hwid": {"nullValue": None},
-                    "rebind_count": {"integerValue": 0},
-                    "last_rebind_at": {"nullValue": None},
-                    "created_at": {"timestampValue": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")}
+        # Use session for multiple requests
+        with requests.Session() as session:
+            for _ in range(count):
+                key_str = '-'.join([secrets.token_hex(2).upper() for _ in range(4)])
+                
+                # Default duration to int
+                try:
+                    duration_val = int(days)
+                except:
+                    duration_val = 7
+
+                doc_data = {
+                    "fields": {
+                        "duration_days": {"integerValue": duration_val},
+                        "is_active": {"booleanValue": True},
+                        "hwid": {"stringValue": "-"},
+                        "login": {"stringValue": "-"},
+                        "rebind_count": {"integerValue": 0},
+                        "created_at": {"timestampValue": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")}
+                    }
                 }
-            }
-            
-            url = f"{FIREBASE_BASE_URL}/keys?documentId={key_str}&key={FIREBASE_API_KEY}"
-            resp = requests.post(url, json=doc_data, timeout=10)
-            
-            if resp.status_code == 200:
-                created_keys.append(key_str)
-                log_admin_action("Create License", key_str, f"Duration: {days} days")
+                
+                url = f"{FIREBASE_BASE_URL}/keys?documentId={key_str}&key={FIREBASE_API_KEY}"
+                resp = session.post(url, json=doc_data, timeout=10)
+                
+                if resp.status_code == 200:
+                    created_keys.append(key_str)
+                    log_admin_action("Create License", key_str, f"Duration: {days} days")
+                else:
+                    current_app.logger.error(f"[API] Firebase Create Error ({resp.status_code}): {resp.text}")
         
         return jsonify({"status": "ok", "created_keys": created_keys})
     except Exception as e:
+        current_app.logger.error(f"[API] Global error in api_license_create: {e}")
         return jsonify({"error": str(e)}), 500
 
 @main_routes.route("/api/licenses/delete", methods=['POST'])

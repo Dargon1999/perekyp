@@ -146,8 +146,22 @@
     <!-- License Keys Management Card (Point 4) -->
     <div class="card animate-fade-in" style="margin-top: 2rem;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
-            <h3>License Keys Management (Firestore)</h3>
-            <div style="display: flex; gap: 1rem; align-items: center;">
+            <div>
+                <h3 style="margin-bottom: 0.25rem;">License Keys Management (Firestore)</h3>
+                <div style="display: flex; gap: 1rem; font-size: 0.85rem; color: var(--text-secondary);">
+                    <span>Total: <b id="totalKeysCount">0</b></span>
+                    <span>Active: <b id="activeKeysCount" style="color: var(--success);">0</b></span>
+                    <span>Banned: <b id="bannedKeysCount" style="color: var(--error);">0</b></span>
+                </div>
+            </div>
+            <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                <div style="display: flex; align-items: center; gap: 0.5rem; background: rgba(255,255,255,0.05); padding: 0.5rem 1rem; border-radius: 8px;">
+                    <label class="switch" style="width: 40px; height: 20px;">
+                        <input type="checkbox" id="showOnlyActiveToggle" onchange="filterLicenseTable()">
+                        <span class="slider round"></span>
+                    </label>
+                    <span style="font-size: 0.9rem;">Show Only Active</span>
+                </div>
                 <input type="text" id="licenseSearchInput" onkeyup="filterLicenseTable()" placeholder="Search by Key or Login..." class="form-control" style="max-width: 250px;">
                 <button onclick="openCreateLicenseModal()" class="btn btn-primary">➕ Create New Key</button>
                 <button onclick="fetchLicenses()" class="btn btn-secondary">↻ Refresh Keys</button>
@@ -332,20 +346,28 @@
 
         if (!data || data.length === 0) {
             tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem;">No keys found.</td></tr>';
+            updateKeyCounters(0, 0, 0);
             return;
         }
 
+        let activeCount = 0;
+        let bannedCount = 0;
+
         data.forEach(lic => {
+            if (lic.is_active) activeCount++;
+            else bannedCount++;
+
             const row = document.createElement('tr');
+            row.setAttribute('data-active', lic.is_active); // For filtering
             
             let statusBadge = lic.is_active ? 
-                '<span class="badge badge-success">АКТИВЕН</span>' : 
-                '<span class="badge badge-danger">БАН / АННУЛИРОВАН</span>';
+                '<span class="badge badge-success" style="box-shadow: 0 0 10px rgba(46, 204, 113, 0.2);">АКТИВЕН</span>' : 
+                '<span class="badge badge-danger" style="opacity: 0.7;">БАН / АННУЛИРОВАН</span>';
             
             let timeInfo = "";
             if (lic.expires_at) {
                 if (lic.expires_at === "Lifetime") {
-                    timeInfo = "Бессрочный";
+                    timeInfo = '<b style="color: var(--primary);">Бессрочный</b>';
                 } else {
                     const dt = new Date(lic.expires_at);
                     timeInfo = "до " + dt.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -367,12 +389,12 @@
                     <button onclick="copyToClipboard('${lic.key}')" class="btn-icon" title="Copy Full Key">📋</button>
                 </td>
                 <td>${statusBadge}</td>
-                <td>${lic.login || '-'}</td>
-                <td style="font-family: monospace; font-size: 0.85rem;">
-                    ${lic.hwid ? `<span title="${lic.hwid}">${lic.hwid.substring(0, 8)}...</span>` : '-'}
+                <td style="${!lic.is_active ? 'opacity: 0.5;' : ''}">${lic.login || '-'}</td>
+                <td style="font-family: monospace; font-size: 0.85rem; ${!lic.is_active ? 'opacity: 0.5;' : ''}">
+                    ${lic.hwid && lic.hwid !== '-' ? `<span title="${lic.hwid}">${lic.hwid.substring(0, 8)}...</span>` : '-'}
                 </td>
-                <td>${timeInfo}</td>
-                <td style="font-size: 0.85rem; color: var(--text-secondary);">${createdAt}</td>
+                <td style="${!lic.is_active ? 'opacity: 0.5;' : ''}">${timeInfo}</td>
+                <td style="font-size: 0.85rem; color: var(--text-secondary); ${!lic.is_active ? 'opacity: 0.5;' : ''}">${createdAt}</td>
                 <td>
                     <div style="display: flex; gap: 0.5rem;">
                         <button onclick="openExtendLicenseModal('${lic.key}')" class="btn btn-sm btn-primary" title="Extend">➕</button>
@@ -386,30 +408,51 @@
             `;
             tbody.appendChild(row);
         });
-        filterLicenseTable(); // Re-apply search after render
+        
+        updateKeyCounters(data.length, activeCount, bannedCount);
+        filterLicenseTable(); // Re-apply search and status filter after render
+    }
+
+    function updateKeyCounters(total, active, banned) {
+        document.getElementById('totalKeysCount').innerText = total;
+        document.getElementById('activeKeysCount').innerText = active;
+        document.getElementById('bannedKeysCount').innerText = banned;
     }
 
     function filterLicenseTable() {
-        const input = document.getElementById('licenseSearchInput');
-        const filter = input.value.toUpperCase();
+        const searchInput = document.getElementById('licenseSearchInput');
+        const filter = searchInput.value.toUpperCase();
+        const showOnlyActive = document.getElementById('showOnlyActiveToggle').checked;
         const table = document.getElementById('licensesTable');
         const tr = table.getElementsByTagName('tr');
 
         for (let i = 1; i < tr.length; i++) {
-            let visible = false;
+            let matchesSearch = false;
+            let matchesStatus = true;
+            
             const tds = tr[i].getElementsByTagName('td');
-            // Search in Key (0) and Login (2)
-            const searchCols = [0, 2];
-            for (let j of searchCols) {
-                if (tds[j]) {
-                    const txtValue = tds[j].textContent || tds[j].innerText;
-                    if (txtValue.toUpperCase().indexOf(filter) > -1) {
-                        visible = true;
-                        break;
+            const isActive = tr[i].getAttribute('data-active') === 'true';
+
+            // Status filter
+            if (showOnlyActive && !isActive) {
+                matchesStatus = false;
+            }
+
+            // Search filter (in Key (0) and Login (2))
+            if (matchesStatus) {
+                const searchCols = [0, 2];
+                for (let j of searchCols) {
+                    if (tds[j]) {
+                        const txtValue = tds[j].textContent || tds[j].innerText;
+                        if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                            matchesSearch = true;
+                            break;
+                        }
                     }
                 }
             }
-            tr[i].style.display = visible ? "" : "none";
+
+            tr[i].style.display = (matchesSearch && matchesStatus) ? "" : "none";
         }
     }
 
@@ -433,11 +476,17 @@
     async function confirmCreateLicense() {
         const days = document.getElementById('newKeyDuration').value;
         const count = document.getElementById('newKeyCount').value;
+        const btn = event.target; // Get the button that triggered this
         
         if (!count || count < 1) {
             showToast("Введите корректное количество ключей", "error");
             return;
         }
+
+        // Visual indication of loading
+        const originalText = btn.innerText;
+        btn.disabled = true;
+        btn.innerHTML = '<div class="spinner" style="width:1rem; height:1rem; border:2px solid white; border-top-color:transparent; border-radius:50%; animation:spin 1s linear infinite;"></div> Создание...';
 
         try {
             const res = await fetch('/api/licenses/create', {
@@ -457,6 +506,9 @@
             }
         } catch (e) {
             showToast('Ошибка сети при создании ключей', "error");
+        } finally {
+            btn.disabled = false;
+            btn.innerText = originalText;
         }
     }
 
