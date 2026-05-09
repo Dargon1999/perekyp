@@ -103,11 +103,20 @@ def migrate_db(app):
             if "user_id" not in columns:
                 app.logger.info("Migrating: Adding user_id to client")
                 with db.engine.connect() as conn:
-                    # SQLite limitation: Adding FK is hard. Just add column for now.
-                    # Ideally we would recreate table, but that risks data loss.
-                    # We'll just add the column.
                     conn.execute(text("ALTER TABLE client ADD COLUMN user_id INTEGER"))
                     conn.commit()
+            
+            # Check for 'license_expiry'
+            if "license_expiry" not in columns:
+                app.logger.info("Migrating: Adding license_expiry to client")
+                with db.engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE client ADD COLUMN license_expiry DATETIME"))
+                    conn.commit()
+
+        # 3. Check for admin_log table
+        if not inspector.has_table("admin_log"):
+            app.logger.info("Migrating: Creating admin_log table")
+            db.create_all() # This will create the missing table based on models.py
 
         # 2. Check ServerSettings table
         if inspector.has_table("server_settings"):

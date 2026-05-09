@@ -131,9 +131,40 @@ class AuthManager:
             def get_field(name, type_str="stringValue"):
                 return fields.get(name, {}).get(type_str)
 
-            is_active = fields.get("is_active", {}).get("booleanValue", True)
-            if not is_active:
-                 return False, "Ключ деактивирован.", None
+            # --- BAN CHECK ---
+            # Check Firebase 'is_active' and also check the main server status via checkin
+            is_active_fb = fields.get("is_active", {}).get("booleanValue", True)
+            if not is_active_fb:
+                 return False, "Ваш ключ был деактивирован администратором.", None
+
+            # --- Check-in with Main Server to sync status and check for Ban ---
+            try:
+                # Get more info for check-in
+                profile_name = "Unknown"
+                app_version = "1.0.4"
+                try:
+                    from version import VERSION
+                    app_version = VERSION
+                except: pass
+
+                checkin_url = "https://dargon-52si.onrender.com/api/client/checkin"
+                checkin_resp = requests.post(checkin_url, json={
+                    "client_id": self.hwid,
+                    "version": app_version,
+                    "username": login,
+                    "name": profile_name,
+                    "hwid": self.hwid
+                }, timeout=5)
+                
+                if checkin_resp.status_code == 403:
+                    ban_data = checkin_resp.json()
+                    return False, ban_data.get("message", "Ваш доступ заблокирован."), None
+                elif checkin_resp.status_code == 402:
+                    expired_data = checkin_resp.json()
+                    return False, expired_data.get("message", "Срок лицензии истек."), None
+            except Exception as e:
+                logger.warning(f"Checkin during validation failed: {e}")
+                # Don't block if main server is down, fallback to Firebase logic
 
             stored_hwid = get_field("hwid")
             stored_login = get_field("login")

@@ -869,15 +869,29 @@ class MainWindow(ResizeMixin, QMainWindow):
         pass
 
     def check_license_status(self):
-        if not self.auth_manager: return
+        """Check license status and ban status with the server."""
+        if not self.auth_manager:
+            return
+
         try:
-            is_valid, message, expires = self.auth_manager.check_license_status()
+            # Lightweight check using check_license_status (which calls validate_key)
+            # We enhance this to check for 'banned' status specifically
+            is_valid, message, expires_at = self.auth_manager.check_license_status()
+            
             if not is_valid:
-                self.license_timer.stop()
-                AlertDialog(self, "Лицензия истекла", f"Статус: {message}\nПриложение будет закрыто.").exec()
-                QApplication.quit()
+                # If banned message is in message, or if specifically 403 (needs check in validate_key)
+                if "заблокирован" in message.lower() or "banned" in message.lower():
+                    logging.critical(f"BANNED: {message}")
+                    QMessageBox.critical(self, "Доступ заблокирован", 
+                                        f"Ваш аккаунт был заблокирован администратором.\n\nПричина: {message}\n\nПриложение будет закрыто.")
+                    QApplication.quit()
+                    return
+
+                logging.warning(f"License check failed: {message}")
+                # We don't quit immediately for other failures (like offline), 
+                # auth_manager handles grace periods.
         except Exception as e:
-            logging.error(f"Error checking license: {e}")
+            logging.error(f"Error during periodic license check: {e}")
 
     def on_update_available(self, version_info):
         try:

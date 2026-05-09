@@ -214,54 +214,56 @@ def upload_update():
         current_app.logger.error(f"Upload failed: {e}")
         return jsonify({"error": str(e)}), 500
 
-@main_routes.route('/client_checkin', methods=['POST'])
+@main_routes.route("/api/client/checkin", methods=["POST"])
 def client_checkin():
     data = request.json
-    if not data:
-        return jsonify({"error": "No JSON data received"}), 400
-        
     client_id = data.get('client_id')
     version = data.get('version')
     username = data.get('username', 'Unknown')
     name = data.get('name', 'Unknown')
-    hwid = data.get('hwid', 'Unknown')
-    
-    # Real IP from ProxyFix or remote_addr
-    ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
-    if ',' in ip_address:
-        ip_address = ip_address.split(',')[0].strip()
+    hwid = data.get('hwid')
+    ip_address = request.remote_addr
 
-    # Enhanced logging for debugging dashboard issues
-    current_app.logger.info(f"[Checkin] Data: ID={client_id}, Ver={version}, LOGIN={username}, Name={name}, HWID={hwid}, IP={ip_address}")
+    if not client_id:
+        return jsonify({"error": "Missing client_id"}), 400
     
-    if client_id:
-        # 1. Try to find client by client_id (HWID)
+    try:
+        # Check database for client
         client = Client.query.filter_by(client_id=client_id).first()
-        
-        # 2. Try to link with a user if LOGIN matches
         user = User.query.filter_by(username=username).first()
         
         if client:
-            # Check if banned
-            if client.status == 'Banned':
-                return jsonify({"status": "banned", "message": "Your access has been suspended."}), 403
-
-            # Update existing client
+            # Update last seen and IP always
+            client.last_seen = datetime.utcnow()
+            client.ip_address = ip_address
             client.version = version
             client.username = username
             client.name = name
             client.hwid = hwid
-            client.last_seen = datetime.utcnow()
-            client.ip_address = ip_address
-            # Only update status if it's not Banned
-            if client.status != 'Banned':
-                client.status = data.get('status', 'Active')
+            
+            # Check if banned
+            if client.status == 'Banned':
+                db.session.commit() # Save the updated last_seen even if banned
+                current_app.logger.warning(f"[Checkin] REJECTED: Banned client {client_id}")
+                return jsonify({
+                    "status": "banned", 
+                    "message": "Ваш доступ заблокирован администратором. Пожалуйста, свяжитесь с поддержкой для выяснения причин."
+                }), 403
+
+            # Check if license expired
+            if client.license_expiry and client.license_expiry < datetime.utcnow():
+                db.session.commit()
+                current_app.logger.info(f"[Checkin] License expired for client {client_id}")
+                return jsonify({
+                    "status": "expired",
+                    "message": f"Срок действия вашей лицензии истек {client.license_expiry.strftime('%d.%m.%Y %H:%M')}. Пожалуйста, продлите подписку."
+                }), 402
+
+            # Only update status to Active if it's not Banned
+            client.status = 'Active'
             
             if user:
                 client.owner = user
-            elif username != "Unknown":
-                # If username is provided but user not found, we still store it in client.username
-                pass
         else:
             # Create new client record
             client = Client(
@@ -271,37 +273,40 @@ def client_checkin():
                 name=name,
                 hwid=hwid,
                 ip_address=ip_address, 
-                status=data.get('status', 'Active'),
+                status='Active',
                 license_expiry=datetime.utcnow() + timedelta(days=7) # Default 7 days for new clients
             )
             if user:
                 client.owner = user
             db.session.add(client)
         
-        try:
-            db.session.commit()
-            current_app.logger.info(f"[Checkin] Success: Client {client_id} (LOGIN: {username}) updated")
-            
-            # Broadcast to all connected clients via WebSocket
-            socketio.emit('client_update', {
-                "client_id": client.client_id,
-                "username": client.username,
-                "name": client.name,
-                "hwid": client.hwid,
-                "version": client.version,
-                "last_seen": client.last_seen.isoformat(),
-                "ip": client.ip_address,
-                "status": client.status,
-                "license_expiry": client.license_expiry.isoformat() if client.license_expiry else None
-            })
-            
-        except Exception as e:
-            current_app.logger.error(f"[Checkin] DB Error: {e}")
-            db.session.rollback()
-            return jsonify({"error": "Database error"}), 500
-            
-        return jsonify({"status": "ok", "message": "Check-in successful"})
-    return jsonify({"error": "Missing client_id"}), 400
+        db.session.commit()
+        
+        # Broadcast to all connected clients via WebSocket (Admin panel update)
+        socketio.emit('client_update', {
+            "id": client.id,
+            "client_id": client.client_id,
+            "username": client.owner.username if client.owner else client.username,
+            "name": client.name,
+            "hwid": client.hwid,
+            "version": client.version,
+            "last_seen": client.last_seen.isoformat(),
+            "ip": client.ip_address,
+            "status": client.status,
+            "license_expiry": client.license_expiry.isoformat() if client.license_expiry else None
+        })
+
+        return jsonify({
+            "status": "ok",
+            "message": "Checkin successful",
+            "license_expiry": client.license_expiry.isoformat() if client.license_expiry else None,
+            "server_time": datetime.utcnow().isoformat()
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"[Checkin] Error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 # --- Web Dashboard Logic ---
 

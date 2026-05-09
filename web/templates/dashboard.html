@@ -116,26 +116,26 @@
                 <thead>
                     <tr>
                         <th onclick="sortTable(0)" style="cursor: pointer;">ID ↕</th>
-                        <th onclick="sortTable(1)" style="cursor: pointer;">LOGIN ↕</th>
+                        <th onclick="sortTable(1)" style="cursor: pointer;">ЛОГИН ↕</th>
                         <th onclick="sortTable(2)" style="cursor: pointer;">Имя ↕</th>
                         <th onclick="sortTable(3)" style="cursor: pointer;">HWID ↕</th>
                         <th onclick="sortTable(4)" style="cursor: pointer;">Срок / Истекает ↕</th>
-                        <th onclick="sortTable(5)" style="cursor: pointer;">Version ↕</th>
-                        <th onclick="sortTable(6)" style="cursor: pointer;">Last Seen (UTC) ↕</th>
-                        <th onclick="sortTable(7)" style="cursor: pointer;">IP Address ↕</th>
-                        <th onclick="sortTable(8)" style="cursor: pointer;">Status ↕</th>
-                        <th>Actions</th>
+                        <th onclick="sortTable(5)" style="cursor: pointer;">Версия ↕</th>
+                        <th onclick="sortTable(6)" style="cursor: pointer;">Активность (UTC) ↕</th>
+                        <th onclick="sortTable(7)" style="cursor: pointer;">IP Адрес ↕</th>
+                        <th onclick="sortTable(8)" style="cursor: pointer;">Статус ↕</th>
+                        <th>Действия</th>
                     </tr>
                 </thead>
                 <tbody id="clientTableBody">
                     {% for client in clients %}
                     <tr>
                         <td style="font-weight: 500; color: var(--text-primary);">{{ client.id }}</td>
-                        <td>{{ (client.owner.username if client.owner else client.username) or 'Unknown' }}</td>
-                        <td>{{ client.name or 'Unknown' }}</td>
+                        <td>{{ (client.owner.username if client.owner else client.username) or 'Неизвестно' }}</td>
+                        <td>{{ client.name or 'Неизвестно' }}</td>
                         <td style="font-family: monospace; font-size: 0.85rem;">
-                            <span title="{{ client.hwid }}">{{ client.hwid[:8] }}...</span>
-                            <button onclick="copyToClipboard('{{ client.hwid }}')" class="btn-icon" title="Copy HWID">📋</button>
+                            <span title="{{ client.hwid }}">{{ client.hwid[:8] if client.hwid else '—' }}...</span>
+                            <button onclick="copyToClipboard('{{ client.hwid }}')" class="btn-icon" title="Копировать HWID">📋</button>
                         </td>
                         <td>
                             {% if not client.license_expiry %}
@@ -144,13 +144,17 @@
                                 {% set now = now_utc() %}
                                 {% set diff = (client.license_expiry - now).total_seconds() %}
                                 {% if diff < 0 %}
-                                    <span class="badge badge-danger" title="{{ client.license_expiry.strftime('%Y-%m-%d %H:%M:%S') }} UTC">Истекла</span>
-                                {% elif diff < 604800 %}
-                                    <span class="badge badge-warning" title="{{ client.license_expiry.strftime('%Y-%m-%d %H:%M:%S') }} UTC">Истекает ({{ (diff/86400)|int }}д)</span>
+                                    <span class="badge badge-danger" title="{{ client.license_expiry.strftime('%d.%m.%Y %H:%M') }}">Истекла</span>
                                 {% else %}
-                                    <span class="badge badge-success" title="{{ client.license_expiry.strftime('%Y-%m-%d %H:%M:%S') }} UTC">Активна</span>
+                                    {% set days = (diff / 86400) | int %}
+                                    {% set hours = ((diff % 86400) / 3600) | int %}
+                                    {% set minutes = ((diff % 3600) / 60) | int %}
+                                    <span class="badge {{ 'badge-warning' if diff < 604800 else 'badge-success' }}" 
+                                          title="{{ client.license_expiry.strftime('%d.%m.%Y %H:%M') }}">
+                                        Активна ({{ days }}д {{ hours }}ч {{ minutes }}м)
+                                    </span>
                                 {% endif %}
-                                <br><small>{{ client.license_expiry.strftime('%Y-%m-%d %H:%M') }}</small>
+                                <br><small>{{ client.license_expiry.strftime('%d.%m.%Y %H:%M') }}</small>
                             {% endif %}
                         </td>
                         <td>
@@ -158,27 +162,27 @@
                                 {{ client.version }}
                             </span>
                         </td>
-                        <td>{{ client.last_seen.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td>{{ client.last_seen.strftime('%d.%m.%Y %H:%M:%S') }}</td>
                         <td>
                             {{ client.ip_address }}
-                            <button onclick="copyToClipboard('{{ client.ip_address }}')" class="btn-icon" title="Copy IP">📋</button>
+                            <button onclick="copyToClipboard('{{ client.ip_address }}')" class="btn-icon" title="Копировать IP">📋</button>
                         </td>
                         <td>
                             <span class="badge {{ 'badge-success' if client.status == 'Active' else ('badge-danger' if client.status == 'Banned' else 'badge-secondary') }}">
-                                {{ client.status }}
+                                {{ 'В сети' if client.status == 'Active' else ('Забанен' if client.status == 'Banned' else 'Не в сети') }}
                             </span>
                         </td>
                         <td>
                             <div style="display: flex; gap: 0.25rem;">
-                                <button onclick="openExtendModal('{{ client.client_id }}')" class="btn btn-sm btn-primary" title="Extend">➕</button>
-                                <button onclick="clientAction('revoke', '{{ client.client_id }}')" class="btn btn-sm btn-warning" title="Revoke">🚫</button>
+                                <button onclick="openExtendModal('{{ client.client_id }}')" class="btn btn-sm btn-primary" title="Продлить">➕</button>
+                                <button onclick="clientAction('revoke', '{{ client.client_id }}')" class="btn btn-sm btn-warning" title="Аннулировать">🚫</button>
                                 {% if client.status == 'Banned' %}
-                                    <button onclick="clientAction('unban', '{{ client.client_id }}')" class="btn btn-sm btn-success" title="Unban">🔓</button>
+                                    <button onclick="clientAction('unban', '{{ client.client_id }}')" class="btn btn-sm btn-success" title="Разбанить">🔓</button>
                                 {% else %}
-                                    <button onclick="clientAction('ban', '{{ client.client_id }}')" class="btn btn-sm btn-danger" title="Ban">🔨</button>
+                                    <button onclick="clientAction('ban', '{{ client.client_id }}')" class="btn btn-sm btn-danger" title="Забанить">🔨</button>
                                 {% endif %}
-                                <button onclick="clientAction('reset_hwid', '{{ client.client_id }}')" class="btn btn-sm btn-secondary" title="Reset HWID">🔄</button>
-                                <button onclick="clientAction('disconnect', '{{ client.client_id }}')" class="btn btn-sm btn-outline" title="Disconnect">🔌</button>
+                                <button onclick="clientAction('reset_hwid', '{{ client.client_id }}')" class="btn btn-sm btn-secondary" title="Сброс HWID">🔄</button>
+                                <button onclick="clientAction('disconnect', '{{ client.client_id }}')" class="btn btn-sm btn-outline" title="Отключить">🔌</button>
                             </div>
                         </td>
                     </tr>
@@ -254,37 +258,14 @@
 </div>
 
 <script>
-    // --- Auto Update & Client Management ---
-    let socket = io();
-    let clientsData = [];
-
-    // Handle Socket.IO updates
-    socket.on('client_update', function(client) {
-        console.log("Socket.IO update received:", client);
-        
-        // Update local clientsData
-        const index = clientsData.findIndex(c => c.client_id === client.client_id);
-        if (index > -1) {
-            clientsData[index] = client;
-        } else {
-            clientsData.unshift(client);
-        }
-        
-        // Sort clientsData by last_seen
-        clientsData.sort((a, b) => new Date(b.last_seen) - new Date(a.last_seen));
-        
-        // Re-render
-        renderTable(clientsData);
-        
-        // Update badge
-        const badge = document.getElementById('clientCountBadge');
-        if(badge) badge.innerText = clientsData.length + ' Active Clients';
+    // Socket.io for real-time updates
+    const socket = io();
+    socket.on('client_update', (client) => {
+        fetchClients(); // Full refresh to keep sorting and search consistent
     });
-
-    // Auto-fetch on load
-    document.addEventListener('DOMContentLoaded', () => {
-        fetchClients();
-        // setInterval(fetchClients, 3000); // No longer needed with Socket.IO
+    
+    socket.on('connect', () => {
+        console.log('Connected to server via WebSocket');
     });
 
     async function triggerForceUpdate() {
@@ -307,32 +288,14 @@
     }
 
     async function fetchClients() {
-        console.log("Fetching clients...");
-        const refreshIcon = document.getElementById('refreshIcon');
-        if(refreshIcon) refreshIcon.style.animation = "spin 1s linear infinite";
-        
         try {
             const res = await fetch('/api/clients');
-            if (res.status === 401) {
-                window.location.href = '/login'; // Redirect if session expired
-                return;
+            if (res.ok) {
+                const data = await res.json();
+                renderTable(data);
             }
-            if (!res.ok) throw new Error(`Server returned ${res.status}`);
-            
-            const data = await res.json();
-            clientsData = data;
-            renderTable(data);
-            
-            // Update badge
-            const badge = document.getElementById('clientCountBadge');
-            if(badge) badge.innerText = data.length + ' Active Clients';
-            
         } catch (e) {
-            console.error("Failed to fetch clients:", e);
-            // Only alert if manual click (we can't easily distinguish here without params, 
-            // but let's just log to console to avoid annoying popups on interval)
-        } finally {
-            if(refreshIcon) refreshIcon.style.animation = "none";
+            console.error('Ошибка получения списка клиентов:', e);
         }
     }
 
@@ -344,7 +307,7 @@
             tbody.innerHTML = `
                 <tr>
                     <td colspan="10" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
-                        No clients connected yet.
+                        Подключенные клиенты не найдены.
                     </td>
                 </tr>`;
             return;
@@ -360,34 +323,45 @@
             if (client.status === 'Active') statusClass = 'badge-success';
             else if (client.status === 'Banned') statusClass = 'badge-danger';
             
-            // Format Date
+            // Format Last Seen (DD.MM.YYYY HH:MM:SS)
             const lastSeen = new Date(client.last_seen);
-            const dateStr = lastSeen.toISOString().replace('T', ' ').split('.')[0];
+            const dateStr = lastSeen.toLocaleString('ru-RU', { 
+                day: '2-digit', month: '2-digit', year: 'numeric', 
+                hour: '2-digit', minute: '2-digit', second: '2-digit' 
+            });
 
             // License Logic
             let licenseBadge = '<span class="badge badge-secondary">Бессрочная</span>';
             if (client.license_expiry) {
                 const expiry = new Date(client.license_expiry);
                 const diff = expiry - now;
-                const days = Math.floor(diff / (1000 * 60 * 60 * 24));
                 
                 if (diff < 0) {
-                    licenseBadge = `<span class="badge badge-danger" title="${expiry.toISOString()}">Истекла</span>`;
-                } else if (days < 7) {
-                    licenseBadge = `<span class="badge badge-warning" title="${expiry.toISOString()}">Истекает (${days}д)</span>`;
+                    licenseBadge = `<span class="badge badge-danger" title="${expiry.toLocaleString('ru-RU')}">Истекла</span>`;
                 } else {
-                    licenseBadge = `<span class="badge badge-success" title="${expiry.toISOString()}">Активна</span>`;
+                    // Logic to show precise time as requested
+                    const totalMinutes = Math.floor(diff / (1000 * 60));
+                    const totalHours = Math.floor(totalMinutes / 60);
+                    const days = Math.floor(totalHours / 24);
+                    const hours = totalHours % 24;
+                    const minutes = totalMinutes % 60;
+
+                    // Display format: "148 дней 18 часов 11 минут" (or similar based on actual diff)
+                    let timeLeftStr = `${days} дней ${hours} часов ${minutes} минут`;
+
+                    const badgeClass = days < 7 ? 'badge-warning' : 'badge-success';
+                    licenseBadge = `<span class="badge ${badgeClass}" title="${expiry.toLocaleString('ru-RU')}">Активна (${timeLeftStr})</span>`;
                 }
-                licenseBadge += `<br><small>${expiry.toISOString().replace('T', ' ').slice(0, 16)}</small>`;
+                licenseBadge += `<br><small>${expiry.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</small>`;
             }
 
             row.innerHTML = `
                 <td style="font-weight: 500; color: var(--text-primary);">${client.id || '—'}</td>
-                <td>${client.username || 'Unknown'}</td>
-                <td>${client.name || 'Unknown'}</td>
+                <td>${client.username || 'Неизвестно'}</td>
+                <td>${client.name || 'Неизвестно'}</td>
                 <td style="font-family: monospace; font-size: 0.85rem;">
                     <span title="${client.hwid}">${(client.hwid || '—').slice(0, 8)}...</span>
-                    <button onclick="copyToClipboard('${client.hwid}')" class="btn-icon" title="Copy HWID">📋</button>
+                    <button onclick="copyToClipboard('${client.hwid}')" class="btn-icon" title="Копировать HWID">📋</button>
                 </td>
                 <td>${licenseBadge}</td>
                 <td>
@@ -398,23 +372,23 @@
                 <td>${dateStr}</td>
                 <td>
                     ${client.ip}
-                    <button onclick="copyToClipboard('${client.ip}')" class="btn-icon" title="Copy IP">📋</button>
+                    <button onclick="copyToClipboard('${client.ip}')" class="btn-icon" title="Копировать IP">📋</button>
                 </td>
                 <td>
                     <span class="badge ${statusClass}">
-                        ${client.status}
+                        ${client.status === 'Active' ? 'В сети' : (client.status === 'Banned' ? 'Забанен' : 'Не в сети')}
                     </span>
                 </td>
                 <td>
                     <div style="display: flex; gap: 0.25rem;">
-                        <button onclick="openExtendModal('${client.client_id}')" class="btn btn-sm btn-primary" title="Extend">➕</button>
-                        <button onclick="clientAction('revoke', '${client.client_id}')" class="btn btn-sm btn-warning" title="Revoke">🚫</button>
+                        <button onclick="openExtendModal('${client.client_id}')" class="btn btn-sm btn-primary" title="Продлить">➕</button>
+                        <button onclick="clientAction('revoke', '${client.client_id}')" class="btn btn-sm btn-warning" title="Аннулировать">🚫</button>
                         ${client.status === 'Banned' ? 
-                            `<button onclick="clientAction('unban', '${client.client_id}')" class="btn btn-sm btn-success" title="Unban">🔓</button>` : 
-                            `<button onclick="clientAction('ban', '${client.client_id}')" class="btn btn-sm btn-danger" title="Ban">🔨</button>`
+                            `<button onclick="clientAction('unban', '${client.client_id}')" class="btn btn-sm btn-success" title="Разбанить">🔓</button>` : 
+                            `<button onclick="clientAction('ban', '${client.client_id}')" class="btn btn-sm btn-danger" title="Забанить">🔨</button>`
                         }
-                        <button onclick="clientAction('reset_hwid', '${client.client_id}')" class="btn btn-sm btn-secondary" title="Reset HWID">🔄</button>
-                        <button onclick="clientAction('disconnect', '${client.client_id}')" class="btn btn-sm btn-outline" title="Disconnect">🔌</button>
+                        <button onclick="clientAction('reset_hwid', '${client.client_id}')" class="btn btn-sm btn-secondary" title="Сброс HWID">🔄</button>
+                        <button onclick="clientAction('disconnect', '${client.client_id}')" class="btn btn-sm btn-outline" title="Отключить">🔌</button>
                     </div>
                 </td>
             `;
@@ -482,7 +456,7 @@
                 fetchClients();
             }
         } catch (e) {
-            alert('Failed to extend license');
+            alert('Ошибка при продлении лицензии');
         }
     }
 
@@ -492,7 +466,7 @@
         const spinner = document.getElementById('cleanupSpinner');
         
         statusDiv.style.display = 'block';
-        msgSpan.innerText = 'Sending command to clients...';
+        msgSpan.innerText = 'Отправка команды клиентам...';
         
         try {
             const res = await fetch(`/api/cleanup/${type}`, {
@@ -505,19 +479,19 @@
                 msgSpan.innerText = data.msg;
                 setTimeout(() => { statusDiv.style.display = 'none'; }, 3000);
             } else {
-                msgSpan.innerText = 'Error: ' + data.msg;
+                msgSpan.innerText = 'Ошибка: ' + data.msg;
             }
         } catch (e) {
-            msgSpan.innerText = 'Network error occurred.';
+            msgSpan.innerText = 'Произошла сетевая ошибка.';
         }
     }
 
     async function clientAction(action, clientId) {
         const confirmations = {
-            'revoke': "Are you sure you want to revoke this license?",
-            'ban': "Are you sure you want to ban this client?",
-            'reset_hwid': "Are you sure you want to reset HWID for this client?",
-            'disconnect': "Are you sure you want to disconnect this client?"
+            'revoke': "Вы уверены, что хотите аннулировать эту лицензию?",
+            'ban': "Вы уверены, что хотите забанить этого клиента?",
+            'reset_hwid': "Вы уверены, что хотите сбросить HWID для этого клиента?",
+            'disconnect': "Вы уверены, что хотите принудительно отключить этого клиента?"
         };
 
         if (confirmations[action] && !confirm(confirmations[action])) return;
@@ -532,10 +506,10 @@
                 fetchClients();
             } else {
                 const err = await res.json();
-                alert('Action failed: ' + (err.error || 'Unknown error'));
+                alert('Действие не удалось: ' + (err.error || 'Неизвестная ошибка'));
             }
         } catch (e) {
-            alert('Action failed due to network error');
+            alert('Действие не удалось из-за сетевой ошибки');
         }
     }
 
@@ -578,12 +552,9 @@
         }
     }
 
-    // Auto-refresh every 30 seconds
-    // setInterval(fetchClients, 30000);
-
-    // Initial fetch to sync state
-    // (Optional, as server already renders first state, but good for consistency)
-    // fetchClients(); 
+    // Refresh every 30 seconds
+    setInterval(fetchClients, 30000);
+    fetchClients();
 
     // --- Server Management Logic (Existing) ---
 
