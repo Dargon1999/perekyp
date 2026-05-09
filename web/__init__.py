@@ -10,7 +10,7 @@ db = SQLAlchemy()
 login_manager = LoginManager()
 login_manager.login_view = 'main.login'
 login_manager.login_message_category = 'info'
-socketio = SocketIO(cors_allowed_origins="*", async_mode='eventlet', logger=True, engineio_logger=True)
+socketio = SocketIO(cors_allowed_origins="*", async_mode='gevent', logger=True, engineio_logger=True)
 
 def create_app(config_class=Config):
     print("DEBUG: create_app() started")
