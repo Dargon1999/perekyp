@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Синхронизация данных - MoneyTracker</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .sync-container {
+            max-width: 600px;
+            margin: 100px auto;
+            padding: 20px;
+        }
+        
+        .sync-card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 32px;
+            margin-bottom: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .sync-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+        }
+        
+        .sync-description {
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+            line-height: 1.6;
+        }
+        
+        .sync-status {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px;
+            background: rgba(59, 130, 246, 0.1);
+            border-radius: 12px;
+            margin-bottom: 24px;
+        }
+        
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--success);
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .sync-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        
+        .sync-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 16px 24px;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            font-size: 1rem;
+        }
+        
+        .sync-btn.primary {
+            background: var(--accent-primary);
+            color: white;
+        }
+        
+        .sync-btn.secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-primary);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .sync-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+        
+        .sync-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .file-input-wrapper input[type="file"] {
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+        
+        .instructions {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 24px;
+        }
+        
+        .instructions h3 {
+            color: var(--success);
+            margin-bottom: 12px;
+        }
+        
+        .instructions ol {
+            padding-left: 20px;
+            color: var(--text-secondary);
+        }
+        
+        .instructions li {
+            margin-bottom: 8px;
+        }
+        
+        .message {
+            padding: 16px;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            display: none;
+        }
+        
+        .message.success {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid var(--success);
+            color: var(--success);
+            display: block;
+        }
+        
+        .message.error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--error);
+            color: var(--error);
+            display: block;
+        }
+        
+        .qr-code {
+            text-align: center;
+            margin: 24px 0;
+        }
+        
+        .qr-code img {
+            border-radius: 12px;
+            padding: 16px;
+            background: white;
+        }
+        
+        .ip-address {
+            font-family: monospace;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 8px 16px;
+            border-radius: 8px;
+            display: inline-block;
+            margin: 12px 0;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container navbar-content">
+            <a class="navbar-brand" href="/">MoneyTracker</a>
+            <div class="nav-links">
+                <a class="nav-link" href="/dashboard">Панель</a>
+                <a class="nav-link" href="/sync">Синхронизация</a>
+                <a class="nav-link" href="/logout">Выйти</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container sync-container">
+        <div class="sync-card">
+            <h1 class="sync-title">Синхронизация данных</h1>
+            <p class="sync-description">
+                Синхронизируйте данные между ПК и мобильным устройством.
+                Экспортируйте данные с одного устройства и импортируйте на другое.
+            </p>
+            
+            <div id="message" class="message"></div>
+            
+            <div class="sync-status">
+                <div class="status-dot"></div>
+                <div>
+                    <strong>Статус подключения</strong>
+                    <div id="status-text">Проверка...</div>
+                </div>
+            </div>
+            
+            <div class="sync-actions">
+                <button class="sync-btn primary" onclick="exportData()" id="exportBtn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    Экспорт данных на ПК
+                </button>
+                
+                <div class="file-input-wrapper">
+                    <button class="sync-btn secondary" id="importBtn">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                        Импорт данных с телефона
+                    </button>
+                    <input type="file" id="importFile" accept=".json" onchange="importData(event)">
+                </div>
+            </div>
+            
+            <div class="instructions">
+                <h3>Как синхронизировать данные:</h3>
+                <ol>
+                    <li><strong>На ПК:</strong> Нажмите "Экспорт данных" и сохраните файл</li>
+                    <li><strong>На телефоне:</strong> Откройте эту же страницу в браузере</li>
+                    <li><strong>На телефоне:</strong> Нажмите "Импорт данных" и выберите файл с ПК</li>
+                    <li>Данные будут загружены на телефон</li>
+                </ol>
+            </div>
+        </div>
+        
+        <div class="sync-card">
+            <h2 class="sync-title">Быстрая синхронизация через сеть</h2>
+            <p class="sync-description">
+                Для автоматической синхронизации откройте эту страницу на телефоне
+                и отсканируйте QR-код или введите адрес вручную.
+            </p>
+            
+            <div id="server-info">
+                <p>Адрес сервера:</p>
+                <div class="ip-address" id="server-address">Загрузка...</div>
+            </div>
+            
+            <div class="qr-code" id="qr-code">
+                <p>QR-код для быстрого подключения</p>
+                <div id="qr-container"></div>
+            </div>
+            
+            <button class="sync-btn secondary" onclick="copyServerAddress()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+                Копировать адрес
+            </button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <script>
+        // Проверка статуса при загрузке
+        document.addEventListener('DOMContentLoaded', function() {
+            checkStatus();
+            updateServerAddress();
+        });
+        
+        function showMessage(text, type) {
+            const messageEl = document.getElementById('message');
+            messageEl.textContent = text;
+            messageEl.className = 'message ' + type;
+            messageEl.style.display = 'block';
+            
+            setTimeout(() => {
+                messageEl.style.display = 'none';
+            }, 5000);
+        }
+        
+        async function checkStatus() {
+            try {
+                const response = await fetch('/api/data/status');
+                const data = await response.json();
+                
+                const statusText = document.getElementById('status-text');
+                if (data.has_data) {
+                    statusText.textContent = `Данные на сервере (последнее обновление: ${new Date(data.last_modified).toLocaleString()})`;
+                } else {
+                    statusText.textContent = 'Нет данных на сервере';
+                }
+            } catch (error) {
+                document.getElementById('status-text').textContent = 'Ошибка проверки статуса';
+            }
+        }
+        
+        async function exportData() {
+            const btn = document.getElementById('exportBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> Экспорт...';
+            
+            try {
+                const response = await fetch('/api/data/export');
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `moneytracker_export_${new Date().toISOString().slice(0,10)}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    
+                    showMessage('Данные успешно экспортированы!', 'success');
+                } else {
+                    showMessage('Ошибка экспорта данных', 'error');
+                }
+            } catch (error) {
+                showMessage('Ошибка сети: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    Экспорт данных на ПК
+                `;
+            }
+        }
+        
+        async function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const btn = document.getElementById('importBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> Импорт...';
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('merge', 'true');
+            
+            try {
+                const response = await fetch('/api/data/import', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showMessage(result.message, 'success');
+                    checkStatus();
+                } else {
+                    showMessage(result.error || 'Ошибка импорта', 'error');
+                }
+            } catch (error) {
+                showMessage('Ошибка сети: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    Импорт данных с телефона
+                `;
+                event.target.value = '';
+            }
+        }
+        
+        function updateServerAddress() {
+            const protocol = window.location.protocol;
+            const host = window.location.host;
+            const address = `${protocol}//${host}`;
+            
+            document.getElementById('server-address').textContent = address;
+            
+            // Генерация QR-кода
+            if (typeof QRCode !== 'undefined') {
+                const qrContainer = document.getElementById('qr-container');
+                qrContainer.innerHTML = '';
+                QRCode.toCanvas(address, { width: 200 }, function(error, canvas) {
+                    if (!error) {
+                        qrContainer.appendChild(canvas);
+                    }
+                });
+            }
+        }
+        
+        function copyServerAddress() {
+            const address = document.getElementById('server-address').textContent;
+            navigator.clipboard.writeText(address).then(() => {
+                showMessage('Адрес скопирован в буфер обмена', 'success');
+            }).catch(() => {
+                showMessage('Не удалось скопировать адрес', 'error');
+            });
+        }
+    </script>
+</body>
+</html>

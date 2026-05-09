@@ -1,0 +1,725 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div style="display: flex; flex-direction: column; gap: 2rem;">
+    
+    <!-- Header -->
+    <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+        <div>
+            <h2 style="margin-bottom: 0.5rem;">Dashboard</h2>
+            <p style="margin-bottom: 0;">Overview of connected clients.</p>
+        </div>
+        <div style="display: flex; gap: 1rem; align-items: center;">
+            <button onclick="fetchClients()" class="btn btn-secondary" style="display: flex; gap: 0.5rem; align-items: center;">
+                <span id="refreshIcon">↻</span> Refresh
+            </button>
+            <span class="badge badge-success" style="font-size: 1rem; padding: 0.5rem 1rem;" id="clientCountBadge">
+                {{ clients|length }} Active Clients
+            </span>
+        </div>
+    </div>
+
+    <!-- Server Management Card -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem;">
+        <div class="card animate-fade-in">
+            <h3 style="margin-bottom: 1.5rem;">Server Management</h3>
+            <div style="display: flex; flex-direction: column; gap: 2rem;">
+                
+                <!-- Version Control -->
+                <div>
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Current Version</label>
+                    <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem;">
+                        <input type="text" id="versionInput" class="form-control" value="{{ settings.current_version }}" style="max-width: 150px;">
+                        <button onclick="updateVersion()" class="btn btn-primary">Set Version</button>
+                    </div>
+                    
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <label class="switch">
+                            <input type="checkbox" id="forceUpdateToggle" {% if settings.force_update %}checked{% endif %} onchange="toggleForceUpdate()">
+                            <span class="slider round"></span>
+                        </label>
+                        <span>Force Update All Clients</span>
+                    </div>
+                </div>
+
+                <!-- Upload Update -->
+                <div>
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Upload New Update (.exe)</label>
+                    <form id="uploadForm" style="display: flex; flex-direction: column; gap: 0.75rem;">
+                        <div style="display: flex; gap: 1rem; align-items: center;">
+                            <input type="file" id="updateFile" accept=".exe" class="form-control">
+                            <button type="button" onclick="uploadUpdate()" class="btn btn-success">Upload & Publish</button>
+                        </div>
+                        
+                        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <textarea id="updateNotes" class="form-control" placeholder="Release notes (optional)" rows="2" style="font-size: 0.9rem;"></textarea>
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                 <input type="checkbox" id="forceOnUpload">
+                                 <label for="forceOnUpload" style="margin: 0; font-size: 0.9rem; cursor: pointer;">Force update on this release</label>
+                            </div>
+                        </div>
+                    </form>
+                    
+                    <!-- Progress Bar -->
+                    <div id="uploadProgressContainer" style="display: none; width: 100%; background: rgba(255,255,255,0.1); border-radius: 10px; height: 10px; overflow: hidden; margin: 0.75rem 0;">
+                        <div id="uploadProgressBar" style="width: 0%; height: 100%; background: var(--success); transition: width 0.3s;"></div>
+                    </div>
+                    <small id="uploadStatusText" style="color: var(--text-secondary); display: block;">
+                        Uploading will automatically update the version and metadata.
+                    </small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Additional Settings (Cleanup) Card -->
+        <div class="card animate-fade-in">
+            <h3 style="margin-bottom: 1.5rem;">Additional Settings (Cleanup)</h3>
+            <div style="display: flex; flex-direction: column; gap: 2rem;">
+                <!-- RAM Cleanup -->
+                <div>
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">RAM Cleanup</label>
+                    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">Force all clients to free system cache and idle memory pages.</p>
+                    <button onclick="performCleanup('ram')" class="btn btn-outline" style="width: 100%; border-color: var(--primary); color: var(--primary);">
+                        <i class="fas fa-memory"></i> Cleanup RAM
+                    </button>
+                </div>
+
+                <!-- Temp Files Cleanup -->
+                <div>
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Temporary Files Cleanup</label>
+                    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">Force all clients to delete temporary files from system directories.</p>
+                    <button onclick="performCleanup('temp')" class="btn btn-outline" style="width: 100%; border-color: var(--accent); color: var(--accent);">
+                        <i class="fas fa-trash-alt"></i> Cleanup Temp Files
+                    </button>
+                </div>
+
+                <!-- Cleanup Status -->
+                <div id="cleanupStatus" style="display: none; padding: 1rem; background: rgba(255,255,255,0.05); border-radius: 8px; border-left: 4px solid var(--primary);">
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <div id="cleanupSpinner" class="spinner" style="width: 1rem; height: 1rem; border: 2px solid rgba(255,255,255,0.2); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                        <span id="cleanupMsg" style="font-size: 0.9rem;">Processing...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Clients List Card -->
+    <div class="card animate-fade-in">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <h3>Connected Clients</h3>
+            <input type="text" id="searchInput" onkeyup="filterTable()" placeholder="Search by ID or IP..." class="form-control" style="max-width: 300px;">
+        </div>
+
+        <div class="table-container">
+            <table class="table" id="clientsTable">
+                <thead>
+                    <tr>
+                        <th onclick="sortTable(0)" style="cursor: pointer;">ID ↕</th>
+                        <th onclick="sortTable(1)" style="cursor: pointer;">LOGIN ↕</th>
+                        <th onclick="sortTable(2)" style="cursor: pointer;">Имя ↕</th>
+                        <th onclick="sortTable(3)" style="cursor: pointer;">HWID ↕</th>
+                        <th onclick="sortTable(4)" style="cursor: pointer;">Срок / Истекает ↕</th>
+                        <th onclick="sortTable(5)" style="cursor: pointer;">Version ↕</th>
+                        <th onclick="sortTable(6)" style="cursor: pointer;">Last Seen (UTC) ↕</th>
+                        <th onclick="sortTable(7)" style="cursor: pointer;">IP Address ↕</th>
+                        <th onclick="sortTable(8)" style="cursor: pointer;">Status ↕</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="clientTableBody">
+                    {% for client in clients %}
+                    <tr>
+                        <td style="font-weight: 500; color: var(--text-primary);">{{ client.id }}</td>
+                        <td>{{ (client.owner.username if client.owner else client.username) or 'Unknown' }}</td>
+                        <td>{{ client.name or 'Unknown' }}</td>
+                        <td style="font-family: monospace; font-size: 0.85rem;">
+                            <span title="{{ client.hwid }}">{{ client.hwid[:8] }}...</span>
+                            <button onclick="copyToClipboard('{{ client.hwid }}')" class="btn-icon" title="Copy HWID">📋</button>
+                        </td>
+                        <td>
+                            {% if not client.license_expiry %}
+                                <span class="badge badge-secondary">Бессрочная</span>
+                            {% else %}
+                                {% set now = now_utc() %}
+                                {% set diff = (client.license_expiry - now).total_seconds() %}
+                                {% if diff < 0 %}
+                                    <span class="badge badge-danger" title="{{ client.license_expiry.strftime('%Y-%m-%d %H:%M:%S') }} UTC">Истекла</span>
+                                {% elif diff < 604800 %}
+                                    <span class="badge badge-warning" title="{{ client.license_expiry.strftime('%Y-%m-%d %H:%M:%S') }} UTC">Истекает ({{ (diff/86400)|int }}д)</span>
+                                {% else %}
+                                    <span class="badge badge-success" title="{{ client.license_expiry.strftime('%Y-%m-%d %H:%M:%S') }} UTC">Активна</span>
+                                {% endif %}
+                                <br><small>{{ client.license_expiry.strftime('%Y-%m-%d %H:%M') }}</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span style="font-family: monospace; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;">
+                                {{ client.version }}
+                            </span>
+                        </td>
+                        <td>{{ client.last_seen.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td>
+                            {{ client.ip_address }}
+                            <button onclick="copyToClipboard('{{ client.ip_address }}')" class="btn-icon" title="Copy IP">📋</button>
+                        </td>
+                        <td>
+                            <span class="badge {{ 'badge-success' if client.status == 'Active' else ('badge-danger' if client.status == 'Banned' else 'badge-secondary') }}">
+                                {{ client.status }}
+                            </span>
+                        </td>
+                        <td>
+                            <div style="display: flex; gap: 0.25rem;">
+                                <button onclick="openExtendModal('{{ client.client_id }}')" class="btn btn-sm btn-primary" title="Extend">➕</button>
+                                <button onclick="clientAction('revoke', '{{ client.client_id }}')" class="btn btn-sm btn-warning" title="Revoke">🚫</button>
+                                {% if client.status == 'Banned' %}
+                                    <button onclick="clientAction('unban', '{{ client.client_id }}')" class="btn btn-sm btn-success" title="Unban">🔓</button>
+                                {% else %}
+                                    <button onclick="clientAction('ban', '{{ client.client_id }}')" class="btn btn-sm btn-danger" title="Ban">🔨</button>
+                                {% endif %}
+                                <button onclick="clientAction('reset_hwid', '{{ client.client_id }}')" class="btn btn-sm btn-secondary" title="Reset HWID">🔄</button>
+                                <button onclick="clientAction('disconnect', '{{ client.client_id }}')" class="btn btn-sm btn-outline" title="Disconnect">🔌</button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                            No clients connected yet.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Admin Logs Card -->
+    <div class="card animate-fade-in">
+        <h3 style="margin-bottom: 1.5rem;">Admin Action Logs</h3>
+        <div class="table-container">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Timestamp (UTC)</th>
+                        <th>Admin</th>
+                        <th>Action</th>
+                        <th>Client ID</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in admin_logs %}
+                    <tr>
+                        <td style="font-size: 0.85rem;">{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td><span class="badge badge-info">{{ log.admin_username }}</span></td>
+                        <td style="font-weight: 500;">{{ log.action }}</td>
+                        <td style="font-family: monospace; font-size: 0.85rem;">{{ log.client_id }}</td>
+                        <td style="color: var(--text-secondary); font-size: 0.9rem;">{{ log.details or '—' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 2rem; color: var(--text-secondary);">No logs found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Extend License Modal -->
+<div id="extendModal" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(5px);">
+    <div class="card" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 400px; padding: 2rem;">
+        <h3 style="margin-bottom: 1.5rem;">Extend License</h3>
+        <input type="hidden" id="extendClientId">
+        
+        <div style="margin-bottom: 1.5rem;">
+            <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Duration</label>
+            <select id="extendDays" class="form-control">
+                <option value="1">1 Day</option>
+                <option value="7">7 Days</option>
+                <option value="30">30 Days</option>
+                <option value="90">90 Days</option>
+                <option value="365">365 Days</option>
+                <option value="lifetime">Lifetime (Infinite)</option>
+            </select>
+        </div>
+        
+        <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+            <button onclick="closeExtendModal()" class="btn btn-secondary">Cancel</button>
+            <button onclick="confirmExtend()" class="btn btn-primary">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- Auto Update & Client Management ---
+    let socket = io();
+    let clientsData = [];
+
+    // Handle Socket.IO updates
+    socket.on('client_update', function(client) {
+        console.log("Socket.IO update received:", client);
+        
+        // Update local clientsData
+        const index = clientsData.findIndex(c => c.client_id === client.client_id);
+        if (index > -1) {
+            clientsData[index] = client;
+        } else {
+            clientsData.unshift(client);
+        }
+        
+        // Sort clientsData by last_seen
+        clientsData.sort((a, b) => new Date(b.last_seen) - new Date(a.last_seen));
+        
+        // Re-render
+        renderTable(clientsData);
+        
+        // Update badge
+        const badge = document.getElementById('clientCountBadge');
+        if(badge) badge.innerText = clientsData.length + ' Active Clients';
+    });
+
+    // Auto-fetch on load
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchClients();
+        // setInterval(fetchClients, 3000); // No longer needed with Socket.IO
+    });
+
+    async function triggerForceUpdate() {
+        if (!confirm("Are you sure you want to force all clients to update immediately?")) return;
+        
+        try {
+            const res = await fetch('/api/force_update', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({force: true})
+            });
+            const data = await res.json();
+            if (data.status === 'ok') {
+                alert('Force update signal sent to all active clients.');
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Failed to send force update signal.');
+        }
+    }
+
+    async function fetchClients() {
+        console.log("Fetching clients...");
+        const refreshIcon = document.getElementById('refreshIcon');
+        if(refreshIcon) refreshIcon.style.animation = "spin 1s linear infinite";
+        
+        try {
+            const res = await fetch('/api/clients');
+            if (res.status === 401) {
+                window.location.href = '/login'; // Redirect if session expired
+                return;
+            }
+            if (!res.ok) throw new Error(`Server returned ${res.status}`);
+            
+            const data = await res.json();
+            clientsData = data;
+            renderTable(data);
+            
+            // Update badge
+            const badge = document.getElementById('clientCountBadge');
+            if(badge) badge.innerText = data.length + ' Active Clients';
+            
+        } catch (e) {
+            console.error("Failed to fetch clients:", e);
+            // Only alert if manual click (we can't easily distinguish here without params, 
+            // but let's just log to console to avoid annoying popups on interval)
+        } finally {
+            if(refreshIcon) refreshIcon.style.animation = "none";
+        }
+    }
+
+    function renderTable(data) {
+        const tbody = document.getElementById('clientTableBody');
+        tbody.innerHTML = '';
+
+        if (data.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="10" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                        No clients connected yet.
+                    </td>
+                </tr>`;
+            return;
+        }
+
+        const now = new Date();
+
+        data.forEach(client => {
+            const row = document.createElement('tr');
+            
+            // Determine status badge class
+            let statusClass = 'badge-secondary';
+            if (client.status === 'Active') statusClass = 'badge-success';
+            else if (client.status === 'Banned') statusClass = 'badge-danger';
+            
+            // Format Date
+            const lastSeen = new Date(client.last_seen);
+            const dateStr = lastSeen.toISOString().replace('T', ' ').split('.')[0];
+
+            // License Logic
+            let licenseBadge = '<span class="badge badge-secondary">Бессрочная</span>';
+            if (client.license_expiry) {
+                const expiry = new Date(client.license_expiry);
+                const diff = expiry - now;
+                const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+                
+                if (diff < 0) {
+                    licenseBadge = `<span class="badge badge-danger" title="${expiry.toISOString()}">Истекла</span>`;
+                } else if (days < 7) {
+                    licenseBadge = `<span class="badge badge-warning" title="${expiry.toISOString()}">Истекает (${days}д)</span>`;
+                } else {
+                    licenseBadge = `<span class="badge badge-success" title="${expiry.toISOString()}">Активна</span>`;
+                }
+                licenseBadge += `<br><small>${expiry.toISOString().replace('T', ' ').slice(0, 16)}</small>`;
+            }
+
+            row.innerHTML = `
+                <td style="font-weight: 500; color: var(--text-primary);">${client.id || '—'}</td>
+                <td>${client.username || 'Unknown'}</td>
+                <td>${client.name || 'Unknown'}</td>
+                <td style="font-family: monospace; font-size: 0.85rem;">
+                    <span title="${client.hwid}">${(client.hwid || '—').slice(0, 8)}...</span>
+                    <button onclick="copyToClipboard('${client.hwid}')" class="btn-icon" title="Copy HWID">📋</button>
+                </td>
+                <td>${licenseBadge}</td>
+                <td>
+                    <span style="font-family: monospace; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;">
+                        ${client.version}
+                    </span>
+                </td>
+                <td>${dateStr}</td>
+                <td>
+                    ${client.ip}
+                    <button onclick="copyToClipboard('${client.ip}')" class="btn-icon" title="Copy IP">📋</button>
+                </td>
+                <td>
+                    <span class="badge ${statusClass}">
+                        ${client.status}
+                    </span>
+                </td>
+                <td>
+                    <div style="display: flex; gap: 0.25rem;">
+                        <button onclick="openExtendModal('${client.client_id}')" class="btn btn-sm btn-primary" title="Extend">➕</button>
+                        <button onclick="clientAction('revoke', '${client.client_id}')" class="btn btn-sm btn-warning" title="Revoke">🚫</button>
+                        ${client.status === 'Banned' ? 
+                            `<button onclick="clientAction('unban', '${client.client_id}')" class="btn btn-sm btn-success" title="Unban">🔓</button>` : 
+                            `<button onclick="clientAction('ban', '${client.client_id}')" class="btn btn-sm btn-danger" title="Ban">🔨</button>`
+                        }
+                        <button onclick="clientAction('reset_hwid', '${client.client_id}')" class="btn btn-sm btn-secondary" title="Reset HWID">🔄</button>
+                        <button onclick="clientAction('disconnect', '${client.client_id}')" class="btn btn-sm btn-outline" title="Disconnect">🔌</button>
+                    </div>
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
+        
+        // Re-apply filter if exists
+        filterTable();
+    }
+
+    function filterTable() {
+        const input = document.getElementById('searchInput');
+        const filter = input.value.toUpperCase();
+        const table = document.getElementById('clientsTable');
+        const tr = table.getElementsByTagName('tr');
+
+        for (let i = 1; i < tr.length; i++) {
+            let visible = false;
+            const tds = tr[i].getElementsByTagName('td');
+            // Search in columns: ID (0), LOGIN (1), Name (2), HWID (3), IP (7)
+            const searchCols = [0, 1, 2, 3, 7];
+            for (let j of searchCols) {
+                if (tds[j]) {
+                    const txtValue = tds[j].textContent || tds[j].innerText;
+                    if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                        visible = true;
+                        break;
+                    }
+                }
+            }
+            tr[i].style.display = visible ? "" : "none";
+        }
+    }
+
+    // --- Actions ---
+
+    function copyToClipboard(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            // Optional: show a small toast or temporary icon change
+        });
+    }
+
+    function openExtendModal(clientId) {
+        document.getElementById('extendClientId').value = clientId;
+        document.getElementById('extendModal').style.display = 'block';
+    }
+
+    function closeExtendModal() {
+        document.getElementById('extendModal').style.display = 'none';
+    }
+
+    async function confirmExtend() {
+        const clientId = document.getElementById('extendClientId').value;
+        const val = document.getElementById('extendDays').value;
+        const days = val === 'lifetime' ? null : parseInt(val);
+        
+        try {
+            const res = await fetch('/api/client/extend', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({client_id: clientId, days: days})
+            });
+            if (res.ok) {
+                closeExtendModal();
+                fetchClients();
+            }
+        } catch (e) {
+            alert('Failed to extend license');
+        }
+    }
+
+    async function performCleanup(type) {
+        const statusDiv = document.getElementById('cleanupStatus');
+        const msgSpan = document.getElementById('cleanupMsg');
+        const spinner = document.getElementById('cleanupSpinner');
+        
+        statusDiv.style.display = 'block';
+        msgSpan.innerText = 'Sending command to clients...';
+        
+        try {
+            const res = await fetch(`/api/cleanup/${type}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'}
+            });
+            const data = await res.json();
+            
+            if (data.status === 'ok') {
+                msgSpan.innerText = data.msg;
+                setTimeout(() => { statusDiv.style.display = 'none'; }, 3000);
+            } else {
+                msgSpan.innerText = 'Error: ' + data.msg;
+            }
+        } catch (e) {
+            msgSpan.innerText = 'Network error occurred.';
+        }
+    }
+
+    async function clientAction(action, clientId) {
+        const confirmations = {
+            'revoke': "Are you sure you want to revoke this license?",
+            'ban': "Are you sure you want to ban this client?",
+            'reset_hwid': "Are you sure you want to reset HWID for this client?",
+            'disconnect': "Are you sure you want to disconnect this client?"
+        };
+
+        if (confirmations[action] && !confirm(confirmations[action])) return;
+
+        try {
+            const res = await fetch(`/api/client/${action}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({client_id: clientId})
+            });
+            if (res.ok) {
+                fetchClients();
+            } else {
+                const err = await res.json();
+                alert('Action failed: ' + (err.error || 'Unknown error'));
+            }
+        } catch (e) {
+            alert('Action failed due to network error');
+        }
+    }
+
+    function sortTable(n) {
+        var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+        table = document.getElementById("clientsTable");
+        switching = true;
+        dir = "asc";
+        
+        while (switching) {
+            switching = false;
+            rows = table.rows;
+            for (i = 1; i < (rows.length - 1); i++) {
+                shouldSwitch = false;
+                x = rows[i].getElementsByTagName("TD")[n];
+                y = rows[i + 1].getElementsByTagName("TD")[n];
+                
+                if (dir == "asc") {
+                    if (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {
+                        shouldSwitch = true;
+                        break;
+                    }
+                } else if (dir == "desc") {
+                    if (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {
+                        shouldSwitch = true;
+                        break;
+                    }
+                }
+            }
+            if (shouldSwitch) {
+                rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+                switching = true;
+                switchcount ++;
+            } else {
+                if (switchcount == 0 && dir == "asc") {
+                    dir = "desc";
+                    switching = true;
+                }
+            }
+        }
+    }
+
+    // Auto-refresh every 30 seconds
+    // setInterval(fetchClients, 30000);
+
+    // Initial fetch to sync state
+    // (Optional, as server already renders first state, but good for consistency)
+    // fetchClients(); 
+
+    // --- Server Management Logic (Existing) ---
+
+    async function updateVersion() {
+        const version = document.getElementById('versionInput').value;
+        try {
+            const res = await fetch('/api/set_version', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({version: version})
+            });
+            const data = await res.json();
+            if(data.status === 'ok') {
+                alert('Version updated to ' + version);
+            }
+        } catch(e) {
+            alert('Error: ' + e);
+        }
+    }
+
+    async function toggleForceUpdate() {
+        const checked = document.getElementById('forceUpdateToggle').checked;
+        try {
+            const res = await fetch('/api/force_update', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({force: checked})
+            });
+            await res.json();
+        } catch(e) {
+            console.error(e);
+            alert('Failed to toggle force update');
+        }
+    }
+
+    async function uploadUpdate() {
+        const fileInput = document.getElementById('updateFile');
+        const version = document.getElementById('versionInput').value;
+        const progressBar = document.getElementById('uploadProgressBar');
+        const progressContainer = document.getElementById('uploadProgressContainer');
+        const statusText = document.getElementById('uploadStatusText');
+        
+        if(!fileInput.files[0]) {
+            alert('Please select a file');
+            return;
+        }
+        
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+        formData.append('version', version);
+        formData.append('notes', document.getElementById('updateNotes').value);
+        formData.append('force', document.getElementById('forceOnUpload').checked);
+        
+        const btn = document.querySelector('button[onclick="uploadUpdate()"]');
+        btn.disabled = true;
+        progressContainer.style.display = 'block';
+        progressBar.style.width = '0%';
+        statusText.innerText = 'Starting upload...';
+
+        const xhr = new XMLHttpRequest();
+        
+        // Track progress
+        xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+                const percent = Math.round((e.loaded / e.total) * 100);
+                progressBar.style.width = percent + '%';
+                statusText.innerText = `Uploading: ${percent}% (${(e.loaded / 1024 / 1024).toFixed(2)} MB / ${(e.total / 1024 / 1024).toFixed(2)} MB)`;
+            }
+        });
+
+        xhr.addEventListener('load', () => {
+            btn.disabled = false;
+            if (xhr.status >= 200 && xhr.status < 300) {
+                const data = JSON.parse(xhr.responseText);
+                statusText.innerText = 'Upload complete! Processing...';
+                alert('Update uploaded successfully!');
+                location.reload();
+            } else {
+                const error = JSON.parse(xhr.responseText);
+                alert('Error: ' + (error.error || 'Unknown error'));
+                progressContainer.style.display = 'none';
+                statusText.innerText = 'Upload failed.';
+            }
+        });
+
+        xhr.addEventListener('error', () => {
+            btn.disabled = false;
+            alert('Upload failed due to network error.');
+            progressContainer.style.display = 'none';
+            statusText.innerText = 'Network error.';
+        });
+
+        xhr.open('POST', '/api/upload_update');
+        xhr.send(formData);
+    }
+</script>
+
+<style>
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
+    th:hover {
+        background-color: rgba(255,255,255,0.05);
+    }
+
+    .badge-warning { background-color: #f39c12; color: white; }
+    .badge-danger { background-color: #e74c3c; color: white; }
+    .badge-info { background-color: #3498db; color: white; }
+
+    .btn-sm {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+        border-radius: 4px;
+    }
+
+    .btn-icon {
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        font-size: 0.9rem;
+        padding: 0;
+        margin-left: 0.25rem;
+        opacity: 0.6;
+        transition: opacity 0.2s;
+    }
+
+    .btn-icon:hover {
+        opacity: 1;
+    }
+
+    .modal {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+</style>
+{% endblock %}

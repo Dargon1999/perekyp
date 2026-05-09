@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div style="display: flex; justify-content: center; align-items: center; min-height: 80vh;">
+    <div class="card" style="width: 100%; max-width: 400px;">
+        <h2 style="text-align: center; margin-bottom: 2rem;">С возвращением</h2>
+        
+        <form method="POST">
+            <div class="form-group">
+                <label for="email" class="form-label">Email адрес</label>
+                <input type="email" class="form-control" id="email" name="email" placeholder="name@example.com" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="password" class="form-label">Пароль</label>
+                <input type="password" class="form-control" id="password" name="password" placeholder="••••••••" required>
+            </div>
+            
+            <div class="form-group" style="display: flex; align-items: center; gap: 8px; margin-top: 10px;">
+                <input type="checkbox" id="remember" name="remember" style="width: 16px; height: 16px;">
+                <label for="remember" class="form-label" style="margin-bottom: 0; cursor: pointer;">Запомнить меня</label>
+            </div>
+            
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1.5rem;">
+                Войти
+            </button>
+        </form>
+        
+        <div style="text-align: center; margin-top: 1.5rem;">
+            <p style="font-size: 0.9rem;">
+                Нет аккаунта? 
+                <a href="{{ url_for('main.register') }}" style="color: var(--accent-primary);">Зарегистрироваться</a>
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,15 @@
+[Unit]
+Description=MoneyTracker PWA Server
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/moneytracker
+Environment="PATH=/opt/moneytracker/venv/bin"
+ExecStart=/opt/moneytracker/venv/bin/python run_server.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
