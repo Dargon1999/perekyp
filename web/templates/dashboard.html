@@ -198,6 +198,36 @@
         </div>
     </div>
 
+    <!-- License Keys Management Card (Point 4) -->
+    <div class="card animate-fade-in" style="margin-top: 2rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <h3>License Keys Management (Firestore)</h3>
+            <div style="display: flex; gap: 1rem;">
+                <button onclick="openCreateLicenseModal()" class="btn btn-primary">➕ Create New Key</button>
+                <button onclick="fetchLicenses()" class="btn btn-secondary">↻ Refresh Keys</button>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table class="table" id="licensesTable">
+                <thead>
+                    <tr>
+                        <th>License Key</th>
+                        <th>Status</th>
+                        <th>Login</th>
+                        <th>HWID</th>
+                        <th>Duration / Expiry</th>
+                        <th>Created At</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="licenseTableBody">
+                    <!-- Loaded via JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
     <!-- Admin Logs Card -->
     <div class="card animate-fade-in">
         <h3 style="margin-bottom: 1.5rem;">Admin Action Logs</h3>
@@ -257,6 +287,61 @@
     </div>
 </div>
 
+<!-- Create License Modal -->
+<div id="createLicenseModal" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(5px);">
+    <div class="card" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 450px; padding: 2rem;">
+        <h3 style="margin-bottom: 1.5rem;">Create New License Keys</h3>
+        
+        <div style="margin-bottom: 1.5rem;">
+            <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Duration</label>
+            <select id="newKeyDuration" class="form-control">
+                <option value="1">1 Day</option>
+                <option value="3">3 Days</option>
+                <option value="7" selected>1 Week</option>
+                <option value="30">1 Month</option>
+                <option value="90">3 Months</option>
+                <option value="180">6 Months</option>
+                <option value="36500">Lifetime (Infinity)</option>
+            </select>
+        </div>
+
+        <div style="margin-bottom: 1.5rem;">
+            <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Quantity</label>
+            <input type="number" id="newKeyCount" class="form-control" value="1" min="1" max="50">
+        </div>
+        
+        <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+            <button onclick="closeCreateLicenseModal()" class="btn btn-secondary">Cancel</button>
+            <button onclick="confirmCreateLicense()" class="btn btn-primary">Create Keys</button>
+        </div>
+    </div>
+</div>
+
+<!-- Extend License (Firestore) Modal -->
+<div id="extendLicenseModal" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(5px);">
+    <div class="card" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 400px; padding: 2rem;">
+        <h3 style="margin-bottom: 1.5rem;">Extend License Key</h3>
+        <input type="hidden" id="extendKeyVal">
+        
+        <div style="margin-bottom: 1.5rem;">
+            <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Add Days</label>
+            <select id="extendKeyDays" class="form-control">
+                <option value="1">1 Day</option>
+                <option value="7">7 Days</option>
+                <option value="30">30 Days</option>
+                <option value="90">90 Days</option>
+                <option value="365">365 Days</option>
+                <option value="lifetime">Set to Lifetime</option>
+            </select>
+        </div>
+        
+        <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+            <button onclick="closeExtendLicenseModal()" class="btn btn-secondary">Cancel</button>
+            <button onclick="confirmExtendLicense()" class="btn btn-primary">Confirm</button>
+        </div>
+    </div>
+</div>
+
 <script>
     // Socket.io for real-time updates
     const socket = io();
@@ -267,6 +352,161 @@
     socket.on('connect', () => {
         console.log('Connected to server via WebSocket');
     });
+
+    // --- License Keys Management (Point 4) ---
+
+    async function fetchLicenses() {
+        try {
+            const res = await fetch('/api/licenses');
+            if (res.ok) {
+                const data = await res.json();
+                renderLicenseTable(data);
+            }
+        } catch (e) {
+            console.error('Ошибка получения списка лицензий:', e);
+        }
+    }
+
+    function renderLicenseTable(data) {
+        const tbody = document.getElementById('licenseTableBody');
+        tbody.innerHTML = '';
+
+        data.forEach(lic => {
+            const row = document.createElement('tr');
+            
+            let statusBadge = lic.is_active ? 
+                '<span class="badge badge-success">АКТИВЕН</span>' : 
+                '<span class="badge badge-danger">БАН</span>';
+            
+            let timeInfo = "";
+            if (lic.expires_at) {
+                if (lic.expires_at === "Lifetime") {
+                    timeInfo = "Навсегда";
+                } else {
+                    const dt = new Date(lic.expires_at);
+                    timeInfo = dt.toLocaleDateString('ru-RU');
+                }
+            } else if (lic.duration_days) {
+                timeInfo = `${lic.duration_days} дн. (не акт.)`;
+            } else {
+                timeInfo = "?";
+            }
+
+            const createdAt = lic.created_at ? new Date(lic.created_at).toLocaleString('ru-RU') : "-";
+
+            row.innerHTML = `
+                <td style="font-family: monospace; font-weight: bold; color: var(--primary);">${lic.key}</td>
+                <td>${statusBadge}</td>
+                <td>${lic.login || '-'}</td>
+                <td style="font-family: monospace; font-size: 0.85rem;">${lic.hwid || '-'}</td>
+                <td>${timeInfo}</td>
+                <td style="font-size: 0.85rem; color: var(--text-secondary);">${createdAt}</td>
+                <td>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button onclick="openExtendLicenseModal('${lic.key}')" class="btn btn-sm btn-primary" title="Extend">➕</button>
+                        <button onclick="toggleLicenseBan('${lic.key}', ${!lic.is_active})" class="btn btn-sm ${lic.is_active ? 'btn-danger' : 'btn-success'}" title="${lic.is_active ? 'Ban' : 'Unban'}">
+                            ${lic.is_active ? '🔨' : '🔓'}
+                        </button>
+                        <button onclick="deleteLicense('${lic.key}')" class="btn btn-sm btn-outline" style="border-color: #e74c3c; color: #e74c3c;" title="Delete">🗑️</button>
+                    </div>
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
+    }
+
+    function openCreateLicenseModal() {
+        document.getElementById('createLicenseModal').style.display = 'block';
+    }
+
+    function closeCreateLicenseModal() {
+        document.getElementById('createLicenseModal').style.display = 'none';
+    }
+
+    async function confirmCreateLicense() {
+        const days = document.getElementById('newKeyDuration').value;
+        const count = document.getElementById('newKeyCount').value;
+        
+        try {
+            const res = await fetch('/api/licenses/create', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({days: days, count: count})
+            });
+            if (res.ok) {
+                const data = await res.json();
+                alert(`Успешно создано ${data.created_keys.length} ключей!`);
+                closeCreateLicenseModal();
+                fetchLicenses();
+            }
+        } catch (e) {
+            alert('Ошибка создания ключей');
+        }
+    }
+
+    async function toggleLicenseBan(key, active) {
+        if (!confirm(`Вы уверены, что хотите ${active ? 'разблокировать' : 'заблокировать'} ключ ${key}?`)) return;
+        
+        try {
+            const res = await fetch('/api/licenses/ban', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({key: key, active: active})
+            });
+            if (res.ok) {
+                fetchLicenses();
+            }
+        } catch (e) {
+            alert('Ошибка при изменении статуса ключа');
+        }
+    }
+
+    async function deleteLicense(key) {
+        if (!confirm(`ВНИМАНИЕ: Вы уверены, что хотите УДАЛИТЬ ключ ${key} навсегда?`)) return;
+        
+        try {
+            const res = await fetch('/api/licenses/delete', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({keys: [key]})
+            });
+            if (res.ok) {
+                fetchLicenses();
+            }
+        } catch (e) {
+            alert('Ошибка при удалении ключа');
+        }
+    }
+
+    function openExtendLicenseModal(key) {
+        document.getElementById('extendKeyVal').value = key;
+        document.getElementById('extendLicenseModal').style.display = 'block';
+    }
+
+    function closeExtendLicenseModal() {
+        document.getElementById('extendLicenseModal').style.display = 'none';
+    }
+
+    async function confirmExtendLicense() {
+        const key = document.getElementById('extendKeyVal').value;
+        const val = document.getElementById('extendKeyDays').value;
+        const days = val === 'lifetime' ? null : parseInt(val);
+        
+        try {
+            const res = await fetch('/api/licenses/extend', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({key: key, days: days})
+            });
+            if (res.ok) {
+                alert('Ключ успешно продлен!');
+                closeExtendLicenseModal();
+                fetchLicenses();
+            }
+        } catch (e) {
+            alert('Ошибка при продлении ключа');
+        }
+    }
 
     async function triggerForceUpdate() {
         if (!confirm("Are you sure you want to force all clients to update immediately?")) return;
@@ -555,6 +795,7 @@
     // Refresh every 30 seconds
     setInterval(fetchClients, 30000);
     fetchClients();
+    fetchLicenses();
 
     // --- Server Management Logic (Existing) ---
 

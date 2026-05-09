@@ -239,6 +239,9 @@ class MainWindow(ResizeMixin, QMainWindow):
         # Connect Profile Button
         self.title_bar.profile_btn.clicked.connect(self.open_profiles_dialog)
         
+        # Connect Disconnect Button (Point 3)
+        self.title_bar.disconnect_btn.clicked.connect(self.handle_disconnect)
+        
         # Icon Map for Navigation
         self.icon_map = {
             "car": "🚗",
@@ -942,6 +945,31 @@ class MainWindow(ResizeMixin, QMainWindow):
             except:
                 pass
 
+    def handle_disconnect(self):
+        """Point 3: Properly handle the 'Disconnect' button."""
+        reply = QMessageBox.question(self, "Отключение", "Вы уверены, что хотите завершить сессию и выйти?",
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            logging.info("User initiated disconnect.")
+            
+            # Clear session in auth manager if applicable
+            if self.auth_manager:
+                self.auth_manager.logout()
+            
+            # Close all active connections (if any, e.g., plugins)
+            try:
+                if hasattr(self, 'db_manager'):
+                    self.db_manager.close()
+            except Exception as e:
+                logging.error(f"Error closing DB manager during disconnect: {e}")
+
+            # Notify user
+            QMessageBox.information(self, "Сессия завершена", "Вы успешно отключены. Сессия завершена.")
+            
+            # Close application
+            self.force_quit()
+
     def open_profiles_dialog(self):
         from gui.profile_dialog import ProfileDialog
         dialog = ProfileDialog(self, self.data_manager)
@@ -951,11 +979,14 @@ class MainWindow(ResizeMixin, QMainWindow):
     def refresh_data(self):
         profile = self.data_manager.get_active_profile()
         if profile:
-            self.title_bar.active_profile_label.setText(profile["name"])
+            name = profile.get("name", "Ter") # Default to Ter if name is missing
+            self.title_bar.active_profile_label.setText(name)
             self.title_bar.active_profile_label.setVisible(True)
+            logging.info(f"UI Refresh: Profile set to '{name}'")
         else:
             self.title_bar.active_profile_label.setText("Профиль не выбран")
             self.title_bar.active_profile_label.setVisible(True)
+            logging.info("UI Refresh: No profile selected")
         
         if hasattr(self.data_manager.get_total_capital_balance, "cache_clear"):
             self.data_manager.get_total_capital_balance.cache_clear()

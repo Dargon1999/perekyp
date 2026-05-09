@@ -8,8 +8,14 @@ import os
 import hashlib
 import requests
 import shutil
+import secrets
 
 main_routes = Blueprint('main', __name__)
+
+# Firestore Config for License Management
+FIREBASE_API_KEY = "AIzaSyAps_XRnofsuusFDXD6cxDWTnk0bJ0kUaE"
+FIREBASE_PROJECT_ID = "generatormail-e478c"
+FIREBASE_BASE_URL = f"https://firestore.googleapis.com/v1/projects/{FIREBASE_PROJECT_ID}/databases/(default)/documents"
 
 def log_admin_action(action, client_id, details=""):
     try:
@@ -589,4 +595,156 @@ def client_disconnect():
     # Ideally we'd send a websocket message to the client to force close
     socketio.emit('force_disconnect', {"client_id": client_id})
     return jsonify({"status": "ok"})
+
+# --- Firestore License Key Management (Point 4) ---
+
+@main_routes.route("/api/licenses")
+@login_required
+def api_licenses():
+    try:
+        url = f"{FIREBASE_BASE_URL}/keys?key={FIREBASE_API_KEY}&pageSize=100"
+        resp = requests.get(url, timeout=10)
+        if resp.status_code != 200:
+            return jsonify({"error": f"Firebase error: {resp.text}"}), resp.status_code
+            
+        data = resp.json()
+        documents = data.get("documents", [])
+        
+        licenses = []
+        for doc in documents:
+            key_val = doc["name"].split("/")[-1]
+            fields = doc.get("fields", {})
+            
+            licenses.append({
+                "key": key_val,
+                "is_active": fields.get("is_active", {}).get("booleanValue", True),
+                "hwid": fields.get("hwid", {}).get("stringValue", "-"),
+                "login": fields.get("login", {}).get("stringValue", "-"),
+                "expires_at": fields.get("expires_at", {}).get("stringValue"),
+                "duration_days": fields.get("duration_days", {}).get("integerValue"),
+                "created_at": fields.get("created_at", {}).get("timestampValue")
+            })
+            
+        return jsonify(licenses)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@main_routes.route("/api/licenses/create", methods=['POST'])
+@login_required
+def api_license_create():
+    data = request.json
+    days = data.get('days', 7)
+    count = data.get('count', 1)
+    
+    created_keys = []
+    try:
+        for _ in range(count):
+            key_str = '-'.join([secrets.token_hex(2).upper() for _ in range(4)])
+            
+            doc_data = {
+                "fields": {
+                    "duration_days": {"integerValue": int(days)},
+                    "is_active": {"booleanValue": True},
+                    "hwid": {"nullValue": None},
+                    "rebind_count": {"integerValue": 0},
+                    "last_rebind_at": {"nullValue": None},
+                    "created_at": {"timestampValue": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")}
+                }
+            }
+            
+            url = f"{FIREBASE_BASE_URL}/keys?documentId={key_str}&key={FIREBASE_API_KEY}"
+            resp = requests.post(url, json=doc_data, timeout=10)
+            
+            if resp.status_code == 200:
+                created_keys.append(key_str)
+                log_admin_action("Create License", key_str, f"Duration: {days} days")
+        
+        return jsonify({"status": "ok", "created_keys": created_keys})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@main_routes.route("/api/licenses/delete", methods=['POST'])
+@login_required
+def api_license_delete():
+    data = request.json
+    keys = data.get('keys', [])
+    
+    deleted_keys = []
+    errors = []
+    
+    for key in keys:
+        try:
+            url = f"{FIREBASE_BASE_URL}/keys/{key}?key={FIREBASE_API_KEY}"
+            resp = requests.delete(url, timeout=10)
+            if resp.status_code == 200:
+                deleted_keys.append(key)
+                log_admin_action("Delete License", key)
+            else:
+                errors.append({"key": key, "error": resp.text})
+        except Exception as e:
+            errors.append({"key": key, "error": str(e)})
+            
+    return jsonify({"status": "ok", "deleted_keys": deleted_keys, "errors": errors})
+
+@main_routes.route("/api/licenses/ban", methods=['POST'])
+@login_required
+def api_license_ban():
+    data = request.json
+    key = data.get('key')
+    active = data.get('active', False)
+    
+    try:
+        url = f"{FIREBASE_BASE_URL}/keys/{key}?key={FIREBASE_API_KEY}&updateMask.fieldPaths=is_active"
+        patch_data = {"fields": {"is_active": {"booleanValue": active}}}
+        resp = requests.patch(url, json=patch_data, timeout=10)
+        
+        if resp.status_code == 200:
+            log_admin_action("Ban/Unban License", key, f"Status: {'Active' if active else 'Banned'}")
+            return jsonify({"status": "ok"})
+        return jsonify({"error": resp.text}), resp.status_code
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@main_routes.route("/api/licenses/extend", methods=['POST'])
+@login_required
+def api_license_extend():
+    data = request.json
+    key = data.get('key')
+    days = data.get('days') # None for Lifetime
+    
+    try:
+        new_expire = ""
+        if days is None:
+            new_expire = "Lifetime"
+        else:
+            # First get current data
+            get_url = f"{FIREBASE_BASE_URL}/keys/{key}?key={FIREBASE_API_KEY}"
+            get_resp = requests.get(get_url, timeout=10)
+            if get_resp.status_code != 200:
+                return jsonify({"error": "License not found"}), 404
+            
+            fields = get_resp.json().get("fields", {})
+            expires_at_str = fields.get("expires_at", {}).get("stringValue")
+            
+            if expires_at_str and expires_at_str != "Lifetime":
+                try:
+                    # Clean Z suffix
+                    dt = datetime.fromisoformat(expires_at_str.replace('Z', ''))
+                    new_dt = dt + timedelta(days=int(days))
+                    new_expire = new_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+                except:
+                    new_expire = (datetime.utcnow() + timedelta(days=int(days))).strftime("%Y-%m-%dT%H:%M:%SZ")
+            else:
+                new_expire = (datetime.utcnow() + timedelta(days=int(days))).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        url = f"{FIREBASE_BASE_URL}/keys/{key}?key={FIREBASE_API_KEY}&updateMask.fieldPaths=expires_at"
+        patch_data = {"fields": {"expires_at": {"stringValue": new_expire}}}
+        resp = requests.patch(url, json=patch_data, timeout=10)
+        
+        if resp.status_code == 200:
+            log_admin_action("Extend License", key, f"New Expiry: {new_expire}")
+            return jsonify({"status": "ok", "new_expiry": new_expire})
+        return jsonify({"error": resp.text}), resp.status_code
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 

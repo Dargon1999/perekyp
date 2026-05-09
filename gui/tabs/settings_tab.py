@@ -803,29 +803,35 @@ class SettingsTab(QWidget):
         btn.setText("") # Clear text if any
 
     def update_license_time_left(self):
-        """Update the time left label based on fixed expiry date."""
+        """Point 2: Update the time left label based on real expiry date 18.12.2125 15:21."""
         from datetime import datetime
         try:
-            # Hardcoded simulation of requested expiry logic for UI display
-            # To show "148 дней 18 часов 11 минут" as requested
-            self.time_left_lbl.setText("Осталось: 148 дней 18 часов 11 минут")
-            
-            # Original dynamic logic (commented out for hardcoded request compliance)
-            """
+            # Real expiry date: 18.12.2125 15:21
             expiry_dt = datetime(2125, 12, 18, 15, 21)
             now = datetime.now()
+            
             diff = expiry_dt - now
+            
             if diff.total_seconds() <= 0:
                 self.time_left_lbl.setText("Срок истек")
                 self.status_lbl.setText("Статус: Истекла")
                 self.status_lbl.setStyleSheet("color: #e74c3c; font-weight: bold;")
                 return
+
             total_seconds = int(diff.total_seconds())
             days = total_seconds // 86400
             hours = (total_seconds % 86400) // 3600
             minutes = (total_seconds % 3600) // 60
+            
+            # Formatting as requested: "148 дней 18 часов 11 минут" (example from user)
+            # We'll use the actual calculated values.
             self.time_left_lbl.setText(f"Осталось: {days} дней {hours} часов {minutes} минут")
-            """
+            
+            # Ensure status is active
+            self.status_lbl.setText("Статус: Активна")
+            self.status_lbl.setStyleSheet("color: #2ecc71; font-weight: bold;")
+            self.expiry_lbl.setText("Действует до: 18.12.2125 15:21")
+            
         except Exception as e:
             logging.error(f"Error updating license time left: {e}")
 

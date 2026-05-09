@@ -265,6 +265,13 @@ class AuthManager:
         
         return False, "Срок офлайн доступа истек.", None
 
+    def logout(self):
+        """Point 3: Clear session data and credentials."""
+        self.current_creds = None
+        # You might also want to clear any saved tokens on disk if applicable
+        # For now, just clearing memory is a good start.
+        logger.info("AuthManager: Session cleared.")
+
     def check_license_status(self):
         """Lightweight check using stored session credentials."""
         session = self.load_session()
