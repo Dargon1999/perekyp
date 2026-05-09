@@ -12,6 +12,9 @@ import secrets
 
 main_routes = Blueprint('main', __name__)
 
+# Global command queue for clients (client_id -> [commands])
+PENDING_COMMANDS = {}
+
 # Firestore Config for License Management
 FIREBASE_API_KEY = "AIzaSyAps_XRnofsuusFDXD6cxDWTnk0bJ0kUaE"
 FIREBASE_PROJECT_ID = "generatormail-e478c"
@@ -225,9 +228,9 @@ def client_checkin():
     data = request.json
     client_id = data.get('client_id')
     version = data.get('version')
-    username = data.get('username', 'Unknown')
-    name = data.get('name', 'Unknown')
-    hwid = data.get('hwid')
+    username = data.get('username') or data.get('login') or 'Unknown'
+    name = data.get('name') or data.get('profile_name') or 'Unknown'
+    hwid = data.get('hwid') or data.get('client_id')
     ip_address = request.remote_addr
 
     if not client_id:
@@ -288,12 +291,22 @@ def client_checkin():
         
         db.session.commit()
         
+        # Fallback logic for username and name display in dashboard
+        owner_username = client.owner.username if client.owner else None
+        display_username = owner_username or client.username or "Unknown"
+        display_name = client.name
+        if not display_name or display_name == "Unknown":
+            display_name = display_username
+
+        # Get pending commands for this client
+        commands = PENDING_COMMANDS.pop(client_id, [])
+        
         # Broadcast to all connected clients via WebSocket (Admin panel update)
         socketio.emit('client_update', {
             "id": client.id,
             "client_id": client.client_id,
-            "username": client.owner.username if client.owner else client.username,
-            "name": client.name,
+            "username": display_username,
+            "name": display_name,
             "hwid": client.hwid,
             "version": client.version,
             "last_seen": client.last_seen.isoformat(),
@@ -305,6 +318,7 @@ def client_checkin():
         return jsonify({
             "status": "ok",
             "message": "Checkin successful",
+            "commands": commands,
             "license_expiry": client.license_expiry.isoformat() if client.license_expiry else None,
             "server_time": datetime.utcnow().isoformat()
         })
@@ -469,14 +483,20 @@ def api_clients():
         result = []
         for c in clients:
             try:
-                # Log individual client serialization for deep debug
-                # current_app.logger.debug(f"[API] Serializing client ID {c.id}")
+                # Fallback logic for username and name
+                owner_username = c.owner.username if c.owner else None
+                display_username = owner_username or c.username or "Unknown"
                 
+                # If name is "Unknown" or empty, use username
+                display_name = c.name
+                if not display_name or display_name == "Unknown":
+                    display_name = display_username
+
                 client_data = {
                     "id": c.id,
                     "client_id": c.client_id,
-                    "username": (c.owner.username if c.owner else c.username) or "Unknown",
-                    "name": c.name or "Unknown",
+                    "username": display_username,
+                    "name": display_name,
                     "hwid": c.hwid or "—",
                     "version": c.version or "1.0.0",
                     "last_seen": c.last_seen.isoformat() if c.last_seen else None,
@@ -499,9 +519,18 @@ def api_clients():
 @login_required
 def api_cleanup_ram():
     try:
-        # В реальности здесь была бы логика взаимодействия с клиентами через сокеты
-        # Но для теста возвращаем успех
-        return jsonify({"status": "ok", "msg": "Команда на очистку ОЗУ отправлена активным клиентам"})
+        # Add to pending commands for ALL clients
+        clients = Client.query.filter(Client.status != 'Banned').all()
+        for c in clients:
+            if c.client_id not in PENDING_COMMANDS:
+                PENDING_COMMANDS[c.client_id] = []
+            if 'cleanup_ram' not in PENDING_COMMANDS[c.client_id]:
+                PENDING_COMMANDS[c.client_id].append('cleanup_ram')
+        
+        # Also emit via socket for real-time dashboard feedback
+        socketio.emit('client_command', {'command': 'cleanup_ram'})
+        log_admin_action("Cleanup RAM", "All", "Sent to all active clients")
+        return jsonify({"status": "ok", "msg": f"Команда на очистку ОЗУ поставлена в очередь для {len(clients)} клиентов"})
     except Exception as e:
         return jsonify({"status": "error", "msg": str(e)}), 500
 
@@ -509,8 +538,18 @@ def api_cleanup_ram():
 @login_required
 def api_cleanup_temp():
     try:
-        # Аналогично очистке ОЗУ
-        return jsonify({"status": "ok", "msg": "Команда на очистку временных файлов отправлена"})
+        # Add to pending commands for ALL clients
+        clients = Client.query.filter(Client.status != 'Banned').all()
+        for c in clients:
+            if c.client_id not in PENDING_COMMANDS:
+                PENDING_COMMANDS[c.client_id] = []
+            if 'cleanup_temp' not in PENDING_COMMANDS[c.client_id]:
+                PENDING_COMMANDS[c.client_id].append('cleanup_temp')
+                
+        # Also emit via socket
+        socketio.emit('client_command', {'command': 'cleanup_temp'})
+        log_admin_action("Cleanup Temp", "All", "Sent to all active clients")
+        return jsonify({"status": "ok", "msg": f"Команда на очистку временных файлов поставлена в очередь для {len(clients)} клиентов"})
     except Exception as e:
         return jsonify({"status": "error", "msg": str(e)}), 500
 
@@ -626,32 +665,50 @@ def client_disconnect():
 @main_routes.route("/api/licenses")
 @login_required
 def api_licenses():
+    current_app.logger.info("[API] Fetching licenses from Firestore")
     try:
         url = f"{FIREBASE_BASE_URL}/keys?key={FIREBASE_API_KEY}&pageSize=100"
-        resp = requests.get(url, timeout=10)
+        # Use a session to avoid potential recursion issues with eventlet/requests
+        session = requests.Session()
+        resp = session.get(url, timeout=10)
+        
         if resp.status_code != 200:
-            return jsonify({"error": f"Firebase error: {resp.text}"}), resp.status_code
+            current_app.logger.error(f"[API] Firestore error: {resp.status_code} - {resp.text}")
+            return jsonify({"error": f"Firebase error: {resp.status_code}"}), resp.status_code
             
         data = resp.json()
         documents = data.get("documents", [])
+        current_app.logger.info(f"[API] Found {len(documents)} licenses in Firestore")
         
         licenses = []
         for doc in documents:
-            key_val = doc["name"].split("/")[-1]
-            fields = doc.get("fields", {})
-            
-            licenses.append({
-                "key": key_val,
-                "is_active": fields.get("is_active", {}).get("booleanValue", True),
-                "hwid": fields.get("hwid", {}).get("stringValue", "-"),
-                "login": fields.get("login", {}).get("stringValue", "-"),
-                "expires_at": fields.get("expires_at", {}).get("stringValue"),
-                "duration_days": fields.get("duration_days", {}).get("integerValue"),
-                "created_at": fields.get("created_at", {}).get("timestampValue")
-            })
+            try:
+                # Firestore doc name format: projects/{project}/databases/(default)/documents/keys/{key_id}
+                key_val = doc.get("name", "").split("/")[-1]
+                if not key_val: continue
+                
+                fields = doc.get("fields", {})
+                
+                # Helper to get field value safely
+                def gv(field_name, type_key, default=None):
+                    return fields.get(field_name, {}).get(type_key, default)
+
+                licenses.append({
+                    "key": key_val,
+                    "is_active": gv("is_active", "booleanValue", True),
+                    "hwid": gv("hwid", "stringValue", "-"),
+                    "login": gv("login", "stringValue", "-"),
+                    "expires_at": gv("expires_at", "stringValue"),
+                    "duration_days": gv("duration_days", "integerValue"),
+                    "created_at": gv("created_at", "timestampValue")
+                })
+            except Exception as doc_err:
+                current_app.logger.error(f"[API] Error parsing document: {doc_err}")
+                continue
             
         return jsonify(licenses)
     except Exception as e:
+        current_app.logger.error(f"[API] Global error in api_licenses: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 @main_routes.route("/api/licenses/create", methods=['POST'])

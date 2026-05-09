@@ -14,6 +14,7 @@ from PyQt6.QtGui import QPixmap
 
 class UpdateWorker(QThread):
     check_finished = pyqtSignal(bool, dict) # success, info
+    command_received = pyqtSignal(list)      # commands list
     
     def __init__(self, server_url, client_id, version, username="Unknown", is_manual=False):
         super().__init__()
@@ -46,7 +47,7 @@ class UpdateWorker(QThread):
 
             try:
                 # Use a session for check-in to handle potential cookies/headers
-                requests.post(checkin_url, json={
+                resp_checkin = requests.post(checkin_url, json={
                     "client_id": self.client_id,
                     "version": self.version,
                     "username": self.username, # This is the LOGIN
@@ -54,6 +55,12 @@ class UpdateWorker(QThread):
                     "hwid": hwid,              # This is the HWID
                     "status": "Active"
                 }, timeout=5)
+                
+                if resp_checkin.status_code == 200:
+                    checkin_data = resp_checkin.json()
+                    commands = checkin_data.get("commands", [])
+                    if commands:
+                        self.command_received.emit(commands)
             except Exception as e:
                 logging.warning(f"[UpdateWorker] Check-in failed: {e}")
                 # Non-critical, continue to update check
@@ -311,7 +318,27 @@ class UpdateManager(QObject):
         self.worker.profile_name = profile_user
         
         self.worker.check_finished.connect(self.on_check_finished)
+        self.worker.command_received.connect(self.process_commands)
         self.worker.start()
+
+    def process_commands(self, commands):
+        """Processes commands received from the server during check-in."""
+        for cmd in commands:
+            logging.info(f"[UpdateManager] Processing server command: {cmd}")
+            if cmd == 'cleanup_ram':
+                try:
+                    from utils.mem_reduct_launcher import launch_embedded_mem_reduct
+                    success, msg = launch_embedded_mem_reduct()
+                    logging.info(f"[UpdateManager] Cleanup RAM result: {success}, {msg}")
+                except Exception as e:
+                    logging.error(f"[UpdateManager] Cleanup RAM failed: {e}")
+            elif cmd == 'cleanup_temp':
+                try:
+                    from utils.cleanup import clean_temp
+                    freed, errors, locked = clean_temp()
+                    logging.info(f"[UpdateManager] Cleanup Temp result: Freed {freed} bytes, Errors {errors}, Locked {locked}")
+                except Exception as e:
+                    logging.error(f"[UpdateManager] Cleanup Temp failed: {e}")
 
     def _log_event(self, message):
         """Logs update events to standard logging instead of a file."""

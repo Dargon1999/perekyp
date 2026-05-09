@@ -300,6 +300,7 @@
 
     async function fetchLicenses() {
         console.log("Fetching licenses from Firebase API...");
+        const tbody = document.getElementById('licenseTableBody');
         try {
             const res = await fetch('/api/licenses');
             if (res.ok) {
@@ -715,7 +716,6 @@
                         if (diff < 0) {
                             licenseBadge = `<span class="badge badge-danger" title="${expiry.toLocaleString('ru-RU')}">Истекла</span>`;
                         } else {
-                            // Logic to show precise time as requested
                             const totalMinutes = Math.floor(diff / (1000 * 60));
                             const totalHours = Math.floor(totalMinutes / 60);
                             const days = Math.floor(totalHours / 24);
@@ -726,7 +726,16 @@
                             const badgeClass = days < 7 ? 'badge-warning' : 'badge-success';
                             licenseBadge = `<span class="badge ${badgeClass}" title="${expiry.toLocaleString('ru-RU')}">Активна (${timeLeftStr})</span>`;
                         }
-                        licenseBadge += `<br><small>${expiry.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</small>`;
+                        
+                        // Precise format: DD.MM.YYYY, HH:MM
+                        const day = String(expiry.getDate()).padStart(2, '0');
+                        const month = String(expiry.getMonth() + 1).padStart(2, '0');
+                        const year = expiry.getFullYear();
+                        const hours = String(expiry.getHours()).padStart(2, '0');
+                        const minutes = String(expiry.getMinutes()).padStart(2, '0');
+                        const formattedDate = `${day}.${month}.${year}, ${hours}:${minutes}`;
+                        
+                        licenseBadge += `<br><small style="font-weight: 600; color: var(--text-primary);">${formattedDate}</small>`;
                     } else {
                         licenseBadge = '<span class="badge badge-secondary">Ошибка даты</span>';
                     }
