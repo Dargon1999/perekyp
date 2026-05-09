@@ -72,37 +72,40 @@
         </div>
 
         <!-- Additional Settings (Cleanup) Card -->
-        <div class="card animate-fade-in">
-            <h3 style="margin-bottom: 1.5rem;">Additional Settings (Cleanup)</h3>
-            <div style="display: flex; flex-direction: column; gap: 2rem;">
-                <!-- RAM Cleanup -->
-                <div>
-                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">RAM Cleanup</label>
-                    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">Force all clients to free system cache and idle memory pages.</p>
-                    <button onclick="performCleanup('ram')" class="btn btn-outline" style="width: 100%; border-color: var(--primary); color: var(--primary);">
-                        <i class="fas fa-memory"></i> Cleanup RAM
-                    </button>
-                </div>
+    <div class="card animate-fade-in">
+        <h3 style="margin-bottom: 1.5rem;">Additional Settings (Cleanup)</h3>
+        <div style="display: flex; flex-direction: column; gap: 2rem;">
+            <!-- RAM Cleanup -->
+            <div>
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">RAM Cleanup</label>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">Force all clients to free system cache and idle memory pages.</p>
+                <button onclick="performCleanup('ram')" class="btn btn-outline" style="width: 100%; border-color: var(--primary); color: var(--primary);">
+                    <i class="fas fa-memory"></i> Cleanup RAM
+                </button>
+            </div>
 
-                <!-- Temp Files Cleanup -->
-                <div>
-                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Temporary Files Cleanup</label>
-                    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">Force all clients to delete temporary files from system directories.</p>
-                    <button onclick="performCleanup('temp')" class="btn btn-outline" style="width: 100%; border-color: var(--accent); color: var(--accent);">
-                        <i class="fas fa-trash-alt"></i> Cleanup Temp Files
-                    </button>
-                </div>
+            <!-- Temp Files Cleanup -->
+            <div>
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Temporary Files Cleanup</label>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">Force all clients to delete temporary files from system directories.</p>
+                <button onclick="performCleanup('temp')" class="btn btn-outline" style="width: 100%; border-color: var(--accent); color: var(--accent);">
+                    <i class="fas fa-trash-alt"></i> Cleanup Temp Files
+                </button>
+            </div>
 
-                <!-- Cleanup Status -->
-                <div id="cleanupStatus" style="display: none; padding: 1rem; background: rgba(255,255,255,0.05); border-radius: 8px; border-left: 4px solid var(--primary);">
-                    <div style="display: flex; align-items: center; gap: 0.75rem;">
-                        <div id="cleanupSpinner" class="spinner" style="width: 1rem; height: 1rem; border: 2px solid rgba(255,255,255,0.2); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite;"></div>
-                        <span id="cleanupMsg" style="font-size: 0.9rem;">Processing...</span>
-                    </div>
+            <!-- Cleanup Status -->
+            <div id="cleanupStatus" style="display: none; padding: 1rem; background: rgba(255,255,255,0.05); border-radius: 8px; border-left: 4px solid var(--primary);">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <div id="cleanupSpinner" class="spinner" style="width: 1rem; height: 1rem; border: 2px solid rgba(255,255,255,0.2); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                    <span id="cleanupMsg" style="font-size: 0.9rem;">Processing...</span>
                 </div>
             </div>
         </div>
     </div>
+</div>
+
+<!-- Toast Notifications Container -->
+<div id="toastContainer" style="position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px;"></div>
 
     <!-- Clients List Card -->
     <div class="card animate-fade-in">
@@ -200,9 +203,10 @@
 
     <!-- License Keys Management Card (Point 4) -->
     <div class="card animate-fade-in" style="margin-top: 2rem;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
             <h3>License Keys Management (Firestore)</h3>
-            <div style="display: flex; gap: 1rem;">
+            <div style="display: flex; gap: 1rem; align-items: center;">
+                <input type="text" id="licenseSearchInput" onkeyup="filterLicenseTable()" placeholder="Search by Key or Login..." class="form-control" style="max-width: 250px;">
                 <button onclick="openCreateLicenseModal()" class="btn btn-primary">➕ Create New Key</button>
                 <button onclick="fetchLicenses()" class="btn btn-secondary">↻ Refresh Keys</button>
             </div>
@@ -212,17 +216,17 @@
             <table class="table" id="licensesTable">
                 <thead>
                     <tr>
-                        <th>License Key</th>
-                        <th>Status</th>
-                        <th>Login</th>
-                        <th>HWID</th>
-                        <th>Duration / Expiry</th>
-                        <th>Created At</th>
+                        <th onclick="sortLicenseTable(0)" style="cursor: pointer;">License Key ↕</th>
+                        <th onclick="sortLicenseTable(1)" style="cursor: pointer;">Status ↕</th>
+                        <th onclick="sortLicenseTable(2)" style="cursor: pointer;">Login ↕</th>
+                        <th onclick="sortLicenseTable(3)" style="cursor: pointer;">HWID ↕</th>
+                        <th onclick="sortLicenseTable(4)" style="cursor: pointer;">Duration / Expiry ↕</th>
+                        <th onclick="sortLicenseTable(5)" style="cursor: pointer;">Created At ↕</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="licenseTableBody">
-                    <!-- Loaded via JS -->
+                    <tr><td colspan="7" style="text-align: center; padding: 2rem;">Loading keys...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -371,20 +375,25 @@
         const tbody = document.getElementById('licenseTableBody');
         tbody.innerHTML = '';
 
+        if (!data || data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem;">No keys found.</td></tr>';
+            return;
+        }
+
         data.forEach(lic => {
             const row = document.createElement('tr');
             
             let statusBadge = lic.is_active ? 
                 '<span class="badge badge-success">АКТИВЕН</span>' : 
-                '<span class="badge badge-danger">БАН</span>';
+                '<span class="badge badge-danger">БАН / АННУЛИРОВАН</span>';
             
             let timeInfo = "";
             if (lic.expires_at) {
                 if (lic.expires_at === "Lifetime") {
-                    timeInfo = "Навсегда";
+                    timeInfo = "Бессрочный";
                 } else {
                     const dt = new Date(lic.expires_at);
-                    timeInfo = dt.toLocaleDateString('ru-RU');
+                    timeInfo = "до " + dt.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
                 }
             } else if (lic.duration_days) {
                 timeInfo = `${lic.duration_days} дн. (не акт.)`;
@@ -393,59 +402,112 @@
             }
 
             const createdAt = lic.created_at ? new Date(lic.created_at).toLocaleString('ru-RU') : "-";
+            
+            // Masked key
+            const maskedKey = lic.key.substring(0, 4) + "-****-****-" + lic.key.substring(lic.key.length - 4);
 
             row.innerHTML = `
-                <td style="font-family: monospace; font-weight: bold; color: var(--primary);">${lic.key}</td>
+                <td style="font-family: monospace; font-weight: bold; color: var(--primary);">
+                    <span title="${lic.key}">${maskedKey}</span>
+                    <button onclick="copyToClipboard('${lic.key}')" class="btn-icon" title="Copy Full Key">📋</button>
+                </td>
                 <td>${statusBadge}</td>
                 <td>${lic.login || '-'}</td>
-                <td style="font-family: monospace; font-size: 0.85rem;">${lic.hwid || '-'}</td>
+                <td style="font-family: monospace; font-size: 0.85rem;">
+                    ${lic.hwid ? `<span title="${lic.hwid}">${lic.hwid.substring(0, 8)}...</span>` : '-'}
+                </td>
                 <td>${timeInfo}</td>
                 <td style="font-size: 0.85rem; color: var(--text-secondary);">${createdAt}</td>
                 <td>
                     <div style="display: flex; gap: 0.5rem;">
                         <button onclick="openExtendLicenseModal('${lic.key}')" class="btn btn-sm btn-primary" title="Extend">➕</button>
-                        <button onclick="toggleLicenseBan('${lic.key}', ${!lic.is_active})" class="btn btn-sm ${lic.is_active ? 'btn-danger' : 'btn-success'}" title="${lic.is_active ? 'Ban' : 'Unban'}">
-                            ${lic.is_active ? '🔨' : '🔓'}
-                        </button>
-                        <button onclick="deleteLicense('${lic.key}')" class="btn btn-sm btn-outline" style="border-color: #e74c3c; color: #e74c3c;" title="Delete">🗑️</button>
+                        ${lic.is_active ? 
+                            `<button onclick="toggleLicenseBan('${lic.key}', false)" class="btn btn-sm btn-danger" title="Revoke (Annul)">🚫 Аннулировать</button>` :
+                            `<button onclick="toggleLicenseBan('${lic.key}', true)" class="btn btn-sm btn-success" title="Activate">🔓 Восстановить</button>`
+                        }
+                        <button onclick="deleteLicense('${lic.key}')" class="btn btn-sm btn-outline" style="border-color: #e74c3c; color: #e74c3c;" title="Delete Permanently">🗑️</button>
                     </div>
                 </td>
             `;
             tbody.appendChild(row);
         });
+        filterLicenseTable(); // Re-apply search after render
+    }
+
+    function filterLicenseTable() {
+        const input = document.getElementById('licenseSearchInput');
+        const filter = input.value.toUpperCase();
+        const table = document.getElementById('licensesTable');
+        const tr = table.getElementsByTagName('tr');
+
+        for (let i = 1; i < tr.length; i++) {
+            let visible = false;
+            const tds = tr[i].getElementsByTagName('td');
+            // Search in Key (0) and Login (2)
+            const searchCols = [0, 2];
+            for (let j of searchCols) {
+                if (tds[j]) {
+                    const txtValue = tds[j].textContent || tds[j].innerText;
+                    if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                        visible = true;
+                        break;
+                    }
+                }
+            }
+            tr[i].style.display = visible ? "" : "none";
+        }
     }
 
     function openCreateLicenseModal() {
-        document.getElementById('createLicenseModal').style.display = 'block';
+        console.log("Opening Create License Modal");
+        const modal = document.getElementById('createLicenseModal');
+        if (modal) {
+            modal.style.display = 'flex'; // Use flex for alignment
+        } else {
+            console.error("Modal 'createLicenseModal' not found");
+        }
     }
 
     function closeCreateLicenseModal() {
-        document.getElementById('createLicenseModal').style.display = 'none';
+        const modal = document.getElementById('createLicenseModal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
     }
 
     async function confirmCreateLicense() {
         const days = document.getElementById('newKeyDuration').value;
         const count = document.getElementById('newKeyCount').value;
         
+        if (!count || count < 1) {
+            showToast("Введите корректное количество ключей", "error");
+            return;
+        }
+
         try {
             const res = await fetch('/api/licenses/create', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({days: days, count: count})
             });
+            
             if (res.ok) {
                 const data = await res.json();
-                alert(`Успешно создано ${data.created_keys.length} ключей!`);
+                showToast(`Успешно создано ${data.created_keys.length} ключей!`, "success");
                 closeCreateLicenseModal();
                 fetchLicenses();
+            } else {
+                const err = await res.json();
+                showToast(`Ошибка: ${err.error || 'Не удалось создать ключи'}`, "error");
             }
         } catch (e) {
-            alert('Ошибка создания ключей');
+            showToast('Ошибка сети при создании ключей', "error");
         }
     }
 
     async function toggleLicenseBan(key, active) {
-        if (!confirm(`Вы уверены, что хотите ${active ? 'разблокировать' : 'заблокировать'} ключ ${key}?`)) return;
+        const actionText = active ? 'восстановить' : 'аннулировать';
+        if (!confirm(`Вы уверены, что хотите ${actionText} ключ ${key}?`)) return;
         
         try {
             const res = await fetch('/api/licenses/ban', {
@@ -454,10 +516,14 @@
                 body: JSON.stringify({key: key, active: active})
             });
             if (res.ok) {
+                showToast(`Ключ успешно ${active ? 'восстановлен' : 'аннулирован'}`, "success");
                 fetchLicenses();
+            } else {
+                const err = await res.json();
+                showToast(`Ошибка: ${err.error || 'Не удалось изменить статус'}`, "error");
             }
         } catch (e) {
-            alert('Ошибка при изменении статуса ключа');
+            showToast('Ошибка при изменении статуса ключа', "error");
         }
     }
 
@@ -471,10 +537,14 @@
                 body: JSON.stringify({keys: [key]})
             });
             if (res.ok) {
+                showToast('Ключ успешно удален', "success");
                 fetchLicenses();
+            } else {
+                const err = await res.json();
+                showToast(`Ошибка: ${err.error || 'Не удалось удалить ключ'}`, "error");
             }
         } catch (e) {
-            alert('Ошибка при удалении ключа');
+            showToast('Ошибка при удалении ключа', "error");
         }
     }
 
@@ -499,16 +569,51 @@
                 body: JSON.stringify({key: key, days: days})
             });
             if (res.ok) {
-                alert('Ключ успешно продлен!');
+                showToast('Ключ успешно продлен!', "success");
                 closeExtendLicenseModal();
                 fetchLicenses();
+            } else {
+                const err = await res.json();
+                showToast(`Ошибка: ${err.error || 'Не удалось продлить ключ'}`, "error");
             }
         } catch (e) {
-            alert('Ошибка при продлении ключа');
+            showToast('Ошибка при продлении ключа', "error");
         }
     }
 
-    async function triggerForceUpdate() {
+    let licenseSortOrder = [1, 1, 1, 1, 1, 1]; // 1 for asc, -1 for desc
+
+    function sortLicenseTable(colIndex) {
+        const table = document.getElementById('licensesTable');
+        const tbody = document.getElementById('licenseTableBody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        
+        if (rows.length < 2 && rows[0] && rows[0].innerText.includes("Loading")) return;
+
+        const order = licenseSortOrder[colIndex];
+        licenseSortOrder[colIndex] *= -1; // Toggle
+
+        rows.sort((a, b) => {
+            let aVal = a.cells[colIndex].innerText.trim();
+            let bVal = b.cells[colIndex].innerText.trim();
+            
+            // Special handling for Key (remove 📋)
+            if (colIndex === 0) {
+                aVal = a.cells[0].querySelector('span').title;
+                bVal = b.cells[0].querySelector('span').title;
+            }
+            
+            // Special handling for Status
+            if (colIndex === 1) {
+                aVal = a.cells[1].innerText;
+                bVal = b.cells[1].innerText;
+            }
+
+            return aVal.localeCompare(bVal, undefined, {numeric: true}) * order;
+        });
+
+        rows.forEach(row => tbody.appendChild(row));
+    }
         if (!confirm("Are you sure you want to force all clients to update immediately?")) return;
         
         try {
@@ -525,6 +630,47 @@
             console.error(e);
             alert('Failed to send force update signal.');
         }
+    }
+
+    // Helper for Toast Notifications
+    function showToast(message, type = "info") {
+        const container = document.getElementById('toastContainer');
+        if (!container) return;
+
+        const toast = document.createElement('div');
+        toast.className = 'animate-fade-in';
+        toast.style.padding = '1rem 1.5rem';
+        toast.style.borderRadius = '8px';
+        toast.style.color = 'white';
+        toast.style.minWidth = '250px';
+        toast.style.boxShadow = '0 4px 12px rgba(0,0,0,0.5)';
+        toast.style.fontSize = '0.9rem';
+        toast.style.display = 'flex';
+        toast.style.justifyContent = 'space-between';
+        toast.style.alignItems = 'center';
+        toast.style.borderLeft = '4px solid transparent';
+
+        if (type === "success") {
+            toast.style.backgroundColor = '#2ecc71';
+            toast.style.borderLeftColor = '#27ae60';
+        } else if (type === "error") {
+            toast.style.backgroundColor = '#e74c3c';
+            toast.style.borderLeftColor = '#c0392b';
+        } else {
+            toast.style.backgroundColor = '#3498db';
+            toast.style.borderLeftColor = '#2980b9';
+        }
+
+        toast.innerHTML = `<span>${message}</span><button onclick="this.parentElement.remove()" style="background:transparent; border:none; color:white; margin-left:1rem; cursor:pointer;">×</button>`;
+        container.appendChild(toast);
+
+        setTimeout(() => {
+            if (toast.parentElement) {
+                toast.style.opacity = '0';
+                toast.style.transition = 'opacity 0.5s ease';
+                setTimeout(() => toast.remove(), 500);
+            }
+        }, 5000);
     }
 
     async function fetchClients() {
