@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div style="display: flex; justify-content: center; align-items: center; min-height: 80vh;">
+    <div class="card" style="width: 100%; max-width: 500px;">
+        <h2 style="text-align: center; margin-bottom: 2rem;">Настройки профиля</h2>
+        
+        <form method="POST">
+            <div class="form-group">
+                <label class="form-label">Логин (Только для чтения)</label>
+                <input type="text" class="form-control" value="{{ user.username }}" readonly style="background: rgba(255,255,255,0.05);">
+                <small style="color: var(--text-secondary);">Логин нельзя изменить после регистрации.</small>
+            </div>
+
+            <div class="form-group">
+                <label for="full_name" class="form-label">Ваше Имя</label>
+                <input type="text" class="form-control" id="full_name" name="full_name" value="{{ user.full_name or '' }}" placeholder="Иван Иванов" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="email" class="form-label">Email адрес</label>
+                <input type="email" class="form-control" id="email" name="email" value="{{ user.email }}" placeholder="name@example.com" required>
+            </div>
+            
+            <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+                <a href="{{ url_for('main.dashboard') }}" class="btn btn-secondary" style="flex: 1; text-align: center;">
+                    Назад
+                </a>
+                <button type="submit" class="btn btn-primary" style="flex: 2;">
+                    Сохранить изменения
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

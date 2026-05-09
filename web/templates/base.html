@@ -119,8 +119,12 @@
 
             <div class="nav-links">
                 {% if current_user.is_authenticated %}
+                    <span style="color: var(--text-secondary); font-size: 0.9rem; margin-right: 1rem;">
+                        Привет, <b>{{ current_user.full_name or current_user.username }}</b>
+                    </span>
                     <a class="nav-link" href="{{ url_for('main.dashboard') }}">Панель</a>
                     <a class="nav-link" href="{{ url_for('main.sync') }}">Синхронизация</a>
+                    <a class="nav-link" href="{{ url_for('main.profile') }}">Профиль</a>
                     <a class="nav-link" href="{{ url_for('main.logout') }}">Выйти</a>
                 {% else %}
                     <a class="nav-link" href="{{ url_for('main.login') }}">Войти</a>

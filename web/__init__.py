@@ -113,6 +113,15 @@ def migrate_db(app):
                     conn.execute(text("ALTER TABLE client ADD COLUMN license_expiry DATETIME"))
                     conn.commit()
 
+        # 2. Check User table
+        if inspector.has_table("user"):
+            columns = [c['name'] for c in inspector.get_columns("user")]
+            if "full_name" not in columns:
+                app.logger.info("Migrating: Adding full_name to user")
+                with db.engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE user ADD COLUMN full_name VARCHAR(100)"))
+                    conn.commit()
+
         # 3. Check for admin_log table
         if not inspector.has_table("admin_log"):
             app.logger.info("Migrating: Creating admin_log table")

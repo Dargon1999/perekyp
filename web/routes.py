@@ -304,10 +304,13 @@ def client_checkin():
         
         db.session.commit()
         
-        # Fallback logic for username and name display in dashboard
+        # Mapping logic for Login (username) and Name (full_name/profile_name)
         owner_username = client.owner.username if client.owner else None
+        owner_full_name = client.owner.full_name if client.owner else None
+        
         display_username = owner_username or client.username or "Unknown"
-        display_name = client.name
+        # Use full name if available, otherwise client name, otherwise fallback to login
+        display_name = owner_full_name or client.name
         if not display_name or display_name == "Unknown":
             display_name = display_username
 
@@ -355,15 +358,29 @@ def register():
     
     if request.method == 'POST':
         username = request.form.get('username')
+        full_name = request.form.get('full_name')
         email = request.form.get('email')
         password = request.form.get('password')
         
+        # Validation
+        if not username or len(username) < 3:
+            flash('Логин должен быть не менее 3 символов', 'danger')
+            return redirect(url_for('main.register'))
+            
+        if not full_name:
+            flash('Имя обязательно для заполнения', 'danger')
+            return redirect(url_for('main.register'))
+
         if User.query.filter_by(username=username).first():
-            flash('Имя пользователя уже занято', 'danger')
+            flash('Имя пользователя (логин) уже занято', 'danger')
+            return redirect(url_for('main.register'))
+            
+        if User.query.filter_by(email=email).first():
+            flash('Email уже зарегистрирован', 'danger')
             return redirect(url_for('main.register'))
             
         hashed_password = generate_password_hash(password)
-        user = User(username=username, email=email, password=hashed_password)
+        user = User(username=username, full_name=full_name, email=email, password=hashed_password)
         db.session.add(user)
         db.session.commit()
         flash('Аккаунт создан! Теперь вы можете войти', 'success')
@@ -427,6 +444,36 @@ def update_resource():
     except Exception as e:
         current_app.logger.error(f"Error in update-resource: {e}")
         return jsonify({"error": str(e)}), 500
+
+@main_routes.route("/profile", methods=['GET', 'POST'])
+@login_required
+def profile():
+    if request.method == 'POST':
+        full_name = request.form.get('full_name')
+        email = request.form.get('email')
+        
+        # Validation
+        if not full_name:
+            flash('Имя обязательно для заполнения', 'danger')
+            return redirect(url_for('main.profile'))
+            
+        if not email:
+            flash('Email обязателен для заполнения', 'danger')
+            return redirect(url_for('main.profile'))
+
+        # Check if email is already taken by another user
+        existing_user = User.query.filter_by(email=email).first()
+        if existing_user and existing_user.id != current_user.id:
+            flash('Этот Email уже используется другим пользователем', 'danger')
+            return redirect(url_for('main.profile'))
+
+        current_user.full_name = full_name
+        current_user.email = email
+        db.session.commit()
+        flash('Профиль успешно обновлен!', 'success')
+        return redirect(url_for('main.profile'))
+        
+    return render_template('profile.html', user=current_user)
 
 @main_routes.route("/login", methods=['GET', 'POST'])
 def login():
@@ -506,10 +553,15 @@ def api_clients():
                     c.status = 'Offline'
                     needs_commit = True
 
-                # Fallback logic for username and name
+                # Mapping logic for Login (username) and Name (full_name/profile_name)
                 owner_username = c.owner.username if c.owner else None
+                owner_full_name = c.owner.full_name if c.owner else None
+                
                 display_username = owner_username or c.username or "Unknown"
-                display_name = c.name or display_username or "Unknown"
+                # Use full name if available, otherwise client name, otherwise fallback to login
+                display_name = owner_full_name or c.name
+                if not display_name or display_name == "Unknown":
+                    display_name = display_username
 
                 result.append({
                     "id": c.id,
