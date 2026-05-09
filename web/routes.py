@@ -446,29 +446,54 @@ def health():
 @main_routes.route("/api/clients")
 def api_clients():
     # Allow access with session cookie OR secret header
-    is_admin = current_user.is_authenticated
-    
-    if not is_admin:
-        secret = request.headers.get('X-Admin-Key')
-        if secret == 'dargon_admin_secret_2024': # Hardcoded secret for GUI client
-            is_admin = True
-    
-    if not is_admin:
-        return jsonify({"error": "Unauthorized"}), 401
+    current_app.logger.info("[API] /api/clients requested")
+    try:
+        is_admin = current_user.is_authenticated
+        
+        if not is_admin:
+            secret = request.headers.get('X-Admin-Key')
+            if secret == 'dargon_admin_secret_2024': # Hardcoded secret for GUI client
+                is_admin = True
+        
+        if not is_admin:
+            current_app.logger.warning("[API] Unauthorized access attempt to /api/clients")
+            return jsonify({"error": "Unauthorized"}), 401
 
-    clients = Client.query.order_by(Client.last_seen.desc()).all()
-    return jsonify([{
-        "id": c.id,
-        "client_id": c.client_id,
-        "username": c.owner.username if c.owner else c.username,
-        "name": c.name,
-        "hwid": c.hwid,
-        "version": c.version,
-        "last_seen": c.last_seen.isoformat(),
-        "ip": c.ip_address,
-        "status": c.status,
-        "license_expiry": c.license_expiry.isoformat() if c.license_expiry else None
-    } for c in clients])
+        clients = Client.query.order_by(Client.last_seen.desc()).all()
+        current_app.logger.info(f"[API] Found {len(clients)} clients in database")
+        
+        if not clients:
+            current_app.logger.info("[API] No clients found, returning empty list")
+            return jsonify([])
+
+        result = []
+        for c in clients:
+            try:
+                # Log individual client serialization for deep debug
+                # current_app.logger.debug(f"[API] Serializing client ID {c.id}")
+                
+                client_data = {
+                    "id": c.id,
+                    "client_id": c.client_id,
+                    "username": (c.owner.username if c.owner else c.username) or "Unknown",
+                    "name": c.name or "Unknown",
+                    "hwid": c.hwid or "—",
+                    "version": c.version or "1.0.0",
+                    "last_seen": c.last_seen.isoformat() if c.last_seen else None,
+                    "ip": c.ip_address or "0.0.0.0",
+                    "status": c.status or "Offline",
+                    "license_expiry": c.license_expiry.isoformat() if c.license_expiry else None
+                }
+                result.append(client_data)
+            except Exception as e:
+                current_app.logger.error(f"[API] Error serializing client {getattr(c, 'id', 'unknown')}: {e}")
+                continue
+                
+        current_app.logger.info(f"[API] Returning {len(result)} clients")
+        return jsonify(result)
+    except Exception as e:
+        current_app.logger.error(f"[API] Global error in api_clients: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
 
 @main_routes.route('/api/cleanup/ram', methods=['POST'])
 @login_required

@@ -557,6 +557,8 @@
 
         rows.forEach(row => tbody.appendChild(row));
     }
+
+    async function triggerForceUpdate() {
         if (!confirm("Are you sure you want to force all clients to update immediately?")) return;
         
         try {
@@ -618,11 +620,17 @@
 
     async function fetchClients() {
         console.log("Fetching clients from API...");
+        const refreshIcon = document.getElementById('refreshIcon');
+        if (refreshIcon) refreshIcon.classList.add('fa-spin');
+
         try {
             const res = await fetch('/api/clients');
+            console.log(`API Response Status: ${res.status}`);
+            
             if (res.ok) {
                 const data = await res.json();
-                console.log(`Successfully loaded ${data.length} clients`);
+                console.log(`Successfully loaded ${data.length} clients:`, data);
+                
                 renderTable(data);
                 
                 // Update active clients badge
@@ -630,22 +638,34 @@
                 if (badge) {
                     badge.innerText = `${data.length} Active Clients`;
                 }
+            } else if (res.status === 401) {
+                console.warn("Unauthorized access to API. Redirecting to login or showing error.");
+                showToast("Сессия истекла. Пожалуйста, войдите снова.", "error");
+                // window.location.href = '/login';
             } else {
                 const errText = await res.text();
                 console.error(`API Error (${res.status}): ${errText}`);
-                showToast(`Ошибка загрузки клиентов: ${res.status}`, "error");
+                showToast(`Ошибка сервера (${res.status}). Попробуйте позже.`, "error");
             }
         } catch (e) {
             console.error('Network error fetching clients:', e);
-            showToast('Сетевая ошибка при получении списка клиентов', "error");
+            showToast('Ошибка сети. Проверьте подключение.', "error");
+        } finally {
+            if (refreshIcon) refreshIcon.classList.remove('fa-spin');
         }
     }
 
     function renderTable(data) {
+        console.log("Rendering table with data:", data);
         const tbody = document.getElementById('clientTableBody');
+        if (!tbody) {
+            console.error("Critical: 'clientTableBody' element not found!");
+            return;
+        }
         tbody.innerHTML = '';
 
-        if (data.length === 0) {
+        if (!data || data.length === 0) {
+            console.log("No clients to display.");
             tbody.innerHTML = `
                 <tr>
                     <td colspan="10" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
@@ -657,88 +677,97 @@
 
         const now = new Date();
 
-        data.forEach(client => {
-            const row = document.createElement('tr');
-            
-            // Determine status badge class
-            let statusClass = 'badge-secondary';
-            if (client.status === 'Active') statusClass = 'badge-success';
-            else if (client.status === 'Banned') statusClass = 'badge-danger';
-            
-            // Format Last Seen (DD.MM.YYYY HH:MM:SS)
-            const lastSeen = new Date(client.last_seen);
-            const dateStr = lastSeen.toLocaleString('ru-RU', { 
-                day: '2-digit', month: '2-digit', year: 'numeric', 
-                hour: '2-digit', minute: '2-digit', second: '2-digit' 
-            });
-
-            // License Logic
-            let licenseBadge = '<span class="badge badge-secondary">Бессрочная</span>';
-            if (client.license_expiry) {
-                const expiry = new Date(client.license_expiry);
-                const diff = expiry - now;
+        data.forEach((client, index) => {
+            try {
+                const row = document.createElement('tr');
                 
-                if (diff < 0) {
-                    licenseBadge = `<span class="badge badge-danger" title="${expiry.toLocaleString('ru-RU')}">Истекла</span>`;
-                } else {
-                    // Logic to show precise time as requested
-                    const totalMinutes = Math.floor(diff / (1000 * 60));
-                    const totalHours = Math.floor(totalMinutes / 60);
-                    const days = Math.floor(totalHours / 24);
-                    const hours = totalHours % 24;
-                    const minutes = totalMinutes % 60;
-
-                    // Display format: "148 дней 18 часов 11 минут" (or similar based on actual diff)
-                    let timeLeftStr = `${days} дней ${hours} часов ${minutes} минут`;
-
-                    const badgeClass = days < 7 ? 'badge-warning' : 'badge-success';
-                    licenseBadge = `<span class="badge ${badgeClass}" title="${expiry.toLocaleString('ru-RU')}">Активна (${timeLeftStr})</span>`;
+                // Determine status badge class
+                let statusClass = 'badge-secondary';
+                if (client.status === 'Active') statusClass = 'badge-success';
+                else if (client.status === 'Banned') statusClass = 'badge-danger';
+                
+                // Format Last Seen (DD.MM.YYYY HH:MM:SS)
+                let dateStr = "—";
+                if (client.last_seen) {
+                    const lastSeen = new Date(client.last_seen);
+                    if (!isNaN(lastSeen.getTime())) {
+                        dateStr = lastSeen.toLocaleString('ru-RU', { 
+                            day: '2-digit', month: '2-digit', year: 'numeric', 
+                            hour: '2-digit', minute: '2-digit', second: '2-digit' 
+                        });
+                    }
                 }
-                licenseBadge += `<br><small>${expiry.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</small>`;
-            }
 
-            row.innerHTML = `
-                <td style="font-weight: 500; color: var(--text-primary);">${client.id || '—'}</td>
-                <td>${client.username || 'Неизвестно'}</td>
-                <td>${client.name || 'Неизвестно'}</td>
-                <td style="font-family: monospace; font-size: 0.85rem;">
-                    <span title="${client.hwid}">${(client.hwid || '—').slice(0, 8)}...</span>
-                    <button onclick="copyToClipboard('${client.hwid}')" class="btn-icon" title="Копировать HWID">📋</button>
-                </td>
-                <td>${licenseBadge}</td>
-                <td>
-                    <span style="font-family: monospace; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;">
-                        ${client.version}
-                    </span>
-                </td>
-                <td>${dateStr}</td>
-                <td>
-                    ${client.ip}
-                    <button onclick="copyToClipboard('${client.ip}')" class="btn-icon" title="Копировать IP">📋</button>
-                </td>
-                <td>
-                    <span class="badge ${statusClass}">
-                        ${client.status === 'Active' ? 'В сети' : (client.status === 'Banned' ? 'Забанен' : 'Не в сети')}
-                    </span>
-                </td>
-                <td>
-                    <div style="display: flex; gap: 0.25rem;">
-                        <button onclick="openExtendModal('${client.client_id}')" class="btn btn-sm btn-primary" title="Продлить">➕</button>
-                        <button onclick="clientAction('revoke', '${client.client_id}')" class="btn btn-sm btn-warning" title="Аннулировать">🚫</button>
-                        ${client.status === 'Banned' ? 
-                            `<button onclick="clientAction('unban', '${client.client_id}')" class="btn btn-sm btn-success" title="Разбанить">🔓</button>` : 
-                            `<button onclick="clientAction('ban', '${client.client_id}')" class="btn btn-sm btn-danger" title="Забанить">🔨</button>`
+                // License Logic
+                let licenseBadge = '<span class="badge badge-secondary">Бессрочная</span>';
+                if (client.license_expiry) {
+                    const expiry = new Date(client.license_expiry);
+                    if (!isNaN(expiry.getTime())) {
+                        const diff = expiry - now;
+                        
+                        if (diff < 0) {
+                            licenseBadge = `<span class="badge badge-danger" title="${expiry.toLocaleString('ru-RU')}">Истекла</span>`;
+                        } else {
+                            // Logic to show precise time as requested
+                            const totalMinutes = Math.floor(diff / (1000 * 60));
+                            const totalHours = Math.floor(totalMinutes / 60);
+                            const days = Math.floor(totalHours / 24);
+                            const hours = totalHours % 24;
+                            const minutes = totalMinutes % 60;
+
+                            let timeLeftStr = `${days} дней ${hours} часов ${minutes} минут`;
+                            const badgeClass = days < 7 ? 'badge-warning' : 'badge-success';
+                            licenseBadge = `<span class="badge ${badgeClass}" title="${expiry.toLocaleString('ru-RU')}">Активна (${timeLeftStr})</span>`;
                         }
-                        <button onclick="clientAction('reset_hwid', '${client.client_id}')" class="btn btn-sm btn-secondary" title="Сброс HWID">🔄</button>
-                        <button onclick="clientAction('disconnect', '${client.client_id}')" class="btn btn-sm btn-outline" title="Отключить">🔌</button>
-                    </div>
-                </td>
-            `;
-            tbody.appendChild(row);
+                        licenseBadge += `<br><small>${expiry.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</small>`;
+                    } else {
+                        licenseBadge = '<span class="badge badge-secondary">Ошибка даты</span>';
+                    }
+                }
+
+                row.innerHTML = `
+                    <td style="font-weight: 500; color: var(--text-primary);">${client.id || '—'}</td>
+                    <td>${client.username || 'Неизвестно'}</td>
+                    <td>${client.name || 'Неизвестно'}</td>
+                    <td style="font-family: monospace; font-size: 0.85rem;">
+                        <span title="${client.hwid}">${(client.hwid || '—').slice(0, 8)}...</span>
+                        <button onclick="copyToClipboard('${client.hwid}')" class="btn-icon" title="Копировать HWID">📋</button>
+                    </td>
+                    <td>${licenseBadge}</td>
+                    <td>
+                        <span style="font-family: monospace; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;">
+                            ${client.version || '—'}
+                        </span>
+                    </td>
+                    <td>${dateStr}</td>
+                    <td>
+                        ${client.ip || '—'}
+                        <button onclick="copyToClipboard('${client.ip}')" class="btn-icon" title="Копировать IP">📋</button>
+                    </td>
+                    <td>
+                        <span class="badge ${statusClass}">
+                            ${client.status === 'Active' ? 'В сети' : (client.status === 'Banned' ? 'Забанен' : 'Не в сети')}
+                        </span>
+                    </td>
+                    <td>
+                        <div style="display: flex; gap: 0.25rem;">
+                            <button onclick="openExtendModal('${client.client_id}')" class="btn btn-sm btn-primary" title="Продлить">➕</button>
+                            <button onclick="clientAction('revoke', '${client.client_id}')" class="btn btn-sm btn-warning" title="Аннулировать">🚫</button>
+                            ${client.status === 'Banned' ? 
+                                `<button onclick="clientAction('unban', '${client.client_id}')" class="btn btn-sm btn-success" title="Разбанить">🔓</button>` : 
+                                `<button onclick="clientAction('ban', '${client.client_id}')" class="btn btn-sm btn-danger" title="Забанить">🔨</button>`
+                            }
+                            <button onclick="clientAction('reset_hwid', '${client.client_id}')" class="btn btn-sm btn-secondary" title="Сброс HWID">🔄</button>
+                            <button onclick="clientAction('disconnect', '${client.client_id}')" class="btn btn-sm btn-outline" title="Отключить">🔌</button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            } catch (err) {
+                console.error(`Error rendering row ${index}:`, err, client);
+            }
         });
-        
-        // Re-apply filter if exists
-        filterTable();
+        filterTable(); // Re-apply filter if exists
     }
 
     function filterTable() {
