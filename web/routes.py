@@ -45,50 +45,62 @@ def get_server_settings():
             settings = ServerSettings(current_version="1.0.4")
             db.session.add(settings)
             db.session.commit()
-        # Force update version to 1.0.4 for this request
-        settings.current_version = "1.0.4"
         return settings
     except Exception as e:
         current_app.logger.error(f"DB Error in get_server_settings: {e}")
         # Return a dummy object if DB is read-only or fails
-        # We need an object with attributes: current_version, force_update
         class DummySettings:
-            current_version = "1.0.0"
+            current_version = "1.0.4"
             force_update = False
+            last_upload_hash = None
+            last_upload_size = 0
+            last_upload_date = datetime.utcnow()
+            last_upload_notes = "Update highly recommended."
         return DummySettings()
 
 @main_routes.route('/update_info', methods=['GET'])
 def update_info():
+    """
+    Returns update metadata. Optimized to use DB values instead of 
+    recalculating file hash on every request to prevent server hanging.
+    """
     settings = get_server_settings()
     base_url = request.url_root.rstrip('/')
     
-    # Calculate metadata on the fly for the response
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    update_dir = os.path.join(base_dir, UPDATE_FOLDER)
-    file_path = os.path.join(update_dir, UPDATE_FILENAME)
-    
-    signature = None
-    file_size = 0
-    pub_date = None
-    
-    try:
-        if os.path.exists(file_path):
-            file_size = os.path.getsize(file_path)
-            pub_date = datetime.fromtimestamp(os.path.getmtime(file_path)).isoformat()
-            h = hashlib.sha256()
-            with open(file_path, 'rb') as f:
-                for chunk in iter(lambda: f.read(8192), b''):
-                    h.update(chunk)
-            signature = h.hexdigest()
-    except Exception as e:
-        current_app.logger.error(f"Metadata calculation failed: {e}")
-    
-    # Use calculated metadata if available, otherwise fallback to DB
-    final_signature = signature or settings.last_upload_hash
-    final_size = file_size or settings.last_upload_size
-    final_date = pub_date or (settings.last_upload_date.isoformat() if settings.last_upload_date else None)
+    # Use metadata from DB (populated during upload)
+    final_signature = settings.last_upload_hash
+    final_size = settings.last_upload_size
+    final_date = settings.last_upload_date.isoformat() if settings.last_upload_date else None
     final_notes = settings.last_upload_notes or "Update highly recommended for stability and new features."
     
+    # Fallback: If DB is empty but file exists, calculate ONCE and potentially update DB
+    if not final_signature:
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        update_dir = os.path.join(base_dir, UPDATE_FOLDER)
+        file_path = os.path.join(update_dir, UPDATE_FILENAME)
+        
+        if os.path.exists(file_path):
+            try:
+                current_app.logger.info("Calculating update metadata for the first time...")
+                file_size = os.path.getsize(file_path)
+                h = hashlib.sha256()
+                with open(file_path, 'rb') as f:
+                    for chunk in iter(lambda: f.read(8192), b''):
+                        h.update(chunk)
+                
+                final_signature = h.hexdigest()
+                final_size = file_size
+                final_date = datetime.fromtimestamp(os.path.getmtime(file_path)).isoformat()
+                
+                # Update DB so we don't do this again
+                if hasattr(settings, 'id'): # Check if it's a real DB object
+                    settings.last_upload_hash = final_signature
+                    settings.last_upload_size = final_size
+                    settings.last_upload_date = datetime.fromtimestamp(os.path.getmtime(file_path))
+                    db.session.commit()
+            except Exception as e:
+                current_app.logger.error(f"On-the-fly metadata calculation failed: {e}")
+
     return jsonify({
         "version": settings.current_version,
         "force_update": settings.force_update,
