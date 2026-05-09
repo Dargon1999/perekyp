@@ -44,7 +44,13 @@ class DashboardTestCase(unittest.TestCase):
             self.login()
             # Add a test client within app context
             with self.app.app_context():
-                client = Client(client_id='test_hwid', version='1.0.0', status='Active', name='Test Name')
+                # User is 'admin' (Login)
+                admin = User.query.filter_by(username='admin').first()
+                admin.full_name = 'Administrator'
+                
+                client = Client(client_id='test_hwid', version='1.0.0', status='Active', 
+                                username='admin', name='AdminProfile')
+                client.owner = admin # Explicitly link for test
                 db.session.add(client)
                 db.session.commit()
                 
@@ -52,8 +58,8 @@ class DashboardTestCase(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             data = json.loads(response.data)
             self.assertEqual(len(data), 1)
-            self.assertEqual(data[0]['client_id'], 'test_hwid')
-            self.assertEqual(data[0]['name'], 'Test Name')
+            self.assertEqual(data[0]['username'], 'admin') # Should be LOGIN
+            self.assertEqual(data[0]['name'], 'Administrator') # Should be NAME (from User.full_name)
 
     def test_api_licenses_unauthorized(self):
         response = self.client.get('/api/licenses')

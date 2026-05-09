@@ -241,10 +241,14 @@ def client_checkin():
     data = request.json
     client_id = data.get('client_id')
     version = data.get('version')
-    username = data.get('username') or data.get('login') or 'Unknown'
-    name = data.get('name') or data.get('profile_name') or 'Unknown'
-    hwid = data.get('hwid') or data.get('client_id')
+    # Always prioritize 'username' as the login and 'name' as the display name
+    received_login = data.get('username') or data.get('login') or 'Unknown'
+    received_name = data.get('name') or data.get('profile_name') or 'Unknown'
+    hwid = data.get('hwid') or data.get('client_id') or 'Unknown'
     ip_address = request.remote_addr
+
+    # Debug logging
+    print(f"[Checkin] Received: ID={client_id}, Ver={version}, Login={received_login}, Profile={received_name}")
 
     if not client_id:
         return jsonify({"error": "Missing client_id"}), 400
@@ -252,15 +256,16 @@ def client_checkin():
     try:
         # Check database for client
         client = Client.query.filter_by(client_id=client_id).first()
-        user = User.query.filter_by(username=username).first()
+        # Find user by LOGIN (username)
+        user = User.query.filter_by(username=received_login).first()
         
         if client:
             # Update last seen and IP always
             client.last_seen = datetime.utcnow()
             client.ip_address = ip_address
             client.version = version
-            client.username = username
-            client.name = name
+            client.username = received_login
+            client.name = received_name
             client.hwid = hwid
             
             # Check if banned
@@ -291,37 +296,36 @@ def client_checkin():
             client = Client(
                 client_id=client_id, 
                 version=version, 
-                username=username, 
-                name=name,
+                username=received_login, 
+                name=received_name,
                 hwid=hwid,
                 ip_address=ip_address, 
                 status='Active',
                 license_expiry=datetime.utcnow() + timedelta(days=7) # Default 7 days for new clients
             )
-            if user:
+            if user: 
                 client.owner = user
             db.session.add(client)
         
         db.session.commit()
         
-        # Mapping logic for Login (username) and Name (full_name/profile_name)
-        owner_username = client.owner.username if client.owner else None
+        # Mapping logic for response/broadcast
+        owner_login = client.owner.username if client.owner else None
         owner_full_name = client.owner.full_name if client.owner else None
         
-        display_username = owner_username or client.username or "Unknown"
-        # Use full name if available, otherwise client name, otherwise fallback to login
+        # LOGIN column: Use registered username if available, otherwise what client sent
+        display_login = owner_login or client.username or "Unknown"
+        
+        # NAME column: Use registered full name if available, otherwise client profile name
         display_name = owner_full_name or client.name
         if not display_name or display_name == "Unknown":
-            display_name = display_username
+            display_name = display_login # Fallback to login if name is missing
 
-        # Get pending commands for this client
-        commands = PENDING_COMMANDS.pop(client_id, [])
-        
         # Broadcast to all connected clients via WebSocket (Admin panel update)
         socketio.emit('client_update', {
             "id": client.id,
             "client_id": client.client_id,
-            "username": display_username,
+            "username": display_login,
             "name": display_name,
             "hwid": client.hwid,
             "version": client.version,
@@ -554,19 +558,21 @@ def api_clients():
                     needs_commit = True
 
                 # Mapping logic for Login (username) and Name (full_name/profile_name)
-                owner_username = c.owner.username if c.owner else None
+                owner_login = c.owner.username if c.owner else None
                 owner_full_name = c.owner.full_name if c.owner else None
                 
-                display_username = owner_username or c.username or "Unknown"
-                # Use full name if available, otherwise client name, otherwise fallback to login
+                # LOGIN column: registered login or client-sent username
+                display_login = owner_login or c.username or "Unknown"
+                
+                # NAME column: registered full name or client-sent profile name
                 display_name = owner_full_name or c.name
                 if not display_name or display_name == "Unknown":
-                    display_name = display_username
+                    display_name = display_login # Fallback
 
                 result.append({
                     "id": c.id,
                     "client_id": c.client_id,
-                    "username": display_username,
+                    "username": display_login,
                     "name": display_name,
                     "hwid": c.hwid or "—",
                     "version": c.version or "1.0.0",

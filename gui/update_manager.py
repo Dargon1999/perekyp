@@ -299,8 +299,8 @@ class UpdateManager(QObject):
         # username -> should be the Login (Sasha1204)
         # name -> should be the Profile Name (ter)
         
-        # If login is missing, fallback to profile name for 'username'
-        final_login = login_user if login_user != "Unknown" else profile_user
+        final_login = login_user
+        final_profile_name = profile_user
                 
         # If still Unknown, prompt user for login (if in manual mode or first check)
         if final_login == "Unknown" and is_manual:
@@ -315,7 +315,7 @@ class UpdateManager(QObject):
         
         # Inject raw HWID and profile name for the check-in
         self.worker.hwid_raw = client_id # In our fixed _get_hwid, this is already the raw format
-        self.worker.profile_name = profile_user
+        self.worker.profile_name = final_profile_name
         
         self.worker.check_finished.connect(self.on_check_finished)
         self.worker.command_received.connect(self.process_commands)
