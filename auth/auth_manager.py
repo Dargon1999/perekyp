@@ -23,6 +23,7 @@ class AuthManager:
         self.session_file = os.path.join(app_data, "MoneyTracker", "auth_session.json")
         self.hwid = self.get_hwid()
         self.current_creds = None
+        self.last_expires_at = None
         
     def get_hwid_map(self):
         """Generates a map of hardware identifiers for fuzzy matching."""
@@ -201,6 +202,7 @@ class AuthManager:
 
             # 3. Expiration Check
             expires_at_str = get_field("expires_at")
+            self.last_expires_at = expires_at_str
             if expires_at_str and expires_at_str != "Lifetime":
                 expires_at = datetime.fromisoformat(expires_at_str.replace('Z', ''))
                 if datetime.now() > expires_at:

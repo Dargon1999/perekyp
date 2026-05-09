@@ -537,9 +537,9 @@ def api_clients():
             current_app.logger.warning("[API] Unauthorized access attempt to /api/clients")
             return jsonify({"error": "Unauthorized"}), 401
 
-        # Optimization: Limit to 200 most recent clients
+        # Optimization: Sort by ID ASC to keep positions stable
         limit = request.args.get('limit', 200, type=int)
-        clients = Client.query.order_by(Client.last_seen.desc()).limit(limit).all()
+        clients = Client.query.order_by(Client.id.asc()).limit(limit).all()
         
         # Determine who is REALLY online (last seen within 3 minutes)
         now = datetime.utcnow()

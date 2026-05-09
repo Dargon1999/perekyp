@@ -803,19 +803,36 @@ class SettingsTab(QWidget):
         btn.setText("") # Clear text if any
 
     def update_license_time_left(self):
-        """Point 2: Update the time left label based on real expiry date 18.12.2125 15:21."""
+        """Update the time left label based on real expiry date from AuthManager."""
         from datetime import datetime
         try:
-            # Real expiry date: 18.12.2125 15:21
-            expiry_dt = datetime(2125, 12, 18, 15, 21)
+            # Get expiry date from AuthManager
+            expiry_str = None
+            if self.auth_manager:
+                expiry_str = self.auth_manager.last_expires_at
+                
+            if not expiry_str or expiry_str == "Lifetime":
+                self.time_left_lbl.setText("Осталось: Бессрочно")
+                self.status_lbl.setText("Статус: Активна")
+                self.status_lbl.setStyleSheet("color: #2ecc71; font-weight: bold;")
+                self.expiry_lbl.setText("Действует до: Бессрочно")
+                return
+
+            # Parse ISO date (e.g., 2026-05-12T14:28:00Z)
+            try:
+                expiry_dt = datetime.fromisoformat(expiry_str.replace('Z', ''))
+            except Exception as e:
+                logging.error(f"Failed to parse expiry date {expiry_str}: {e}")
+                return
+
             now = datetime.now()
-            
             diff = expiry_dt - now
             
             if diff.total_seconds() <= 0:
                 self.time_left_lbl.setText("Срок истек")
                 self.status_lbl.setText("Статус: Истекла")
                 self.status_lbl.setStyleSheet("color: #e74c3c; font-weight: bold;")
+                self.expiry_lbl.setText(f"Действует до: {expiry_dt.strftime('%d.%m.%Y %H:%M')}")
                 return
 
             total_seconds = int(diff.total_seconds())
@@ -823,14 +840,12 @@ class SettingsTab(QWidget):
             hours = (total_seconds % 86400) // 3600
             minutes = (total_seconds % 3600) // 60
             
-            # Formatting as requested: "148 дней 18 часов 11 минут" (example from user)
-            # We'll use the actual calculated values.
             self.time_left_lbl.setText(f"Осталось: {days} дней {hours} часов {minutes} минут")
             
             # Ensure status is active
             self.status_lbl.setText("Статус: Активна")
             self.status_lbl.setStyleSheet("color: #2ecc71; font-weight: bold;")
-            self.expiry_lbl.setText("Действует до: 18.12.2125 15:21")
+            self.expiry_lbl.setText(f"Действует до: {expiry_dt.strftime('%d.%m.%Y %H:%M')}")
             
         except Exception as e:
             logging.error(f"Error updating license time left: {e}")

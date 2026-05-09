@@ -739,6 +739,9 @@
             return;
         }
 
+        // Sort data by ID to ensure stable positioning (Point 1)
+        data.sort((a, b) => (a.id || 0) - (b.id || 0));
+
         const now = new Date();
 
         data.forEach((client) => {
