@@ -131,7 +131,13 @@
                     </tr>
                 </thead>
                 <tbody id="clientTableBody">
-                    <tr><td colspan="10" style="text-align: center; padding: 2rem;">Loading clients...</td></tr>
+                    <tr class="skeleton-row">
+                        <td colspan="10">
+                            <div class="skeleton-bar" style="height: 40px; margin: 10px 0;"></div>
+                            <div class="skeleton-bar" style="height: 40px; margin: 10px 0;"></div>
+                            <div class="skeleton-bar" style="height: 40px; margin: 10px 0;"></div>
+                        </td>
+                    </tr>
                 </tbody>
             </table>
         </div>
@@ -1108,6 +1114,18 @@
     }
 
     .badge-success { background-color: #2ecc71; color: white; }
-    .badge-secondary { background-color: #95a5a6; color: white; }
-</style>
-{% endblock %}
+     .badge-secondary { background-color: #95a5a6; color: white; }
+
+     .skeleton-bar {
+         background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 75%);
+         background-size: 200% 100%;
+         animation: skeleton-loading 1.5s infinite;
+         border-radius: 4px;
+     }
+
+     @keyframes skeleton-loading {
+         0% { background-position: 200% 0; }
+         100% { background-position: -200% 0; }
+     }
+ </style>
+ {% endblock %}
