@@ -485,23 +485,27 @@ def api_clients():
             current_app.logger.warning("[API] Unauthorized access attempt to /api/clients")
             return jsonify({"error": "Unauthorized"}), 401
 
-        # Optimization: Limit to 200 most recent clients to prevent browser hanging
+        # Optimization: Limit to 200 most recent clients
         limit = request.args.get('limit', 200, type=int)
         clients = Client.query.order_by(Client.last_seen.desc()).limit(limit).all()
-        current_app.logger.info(f"[API] Found {len(clients)} clients in database (limit {limit})")
         
-        if not clients:
-            current_app.logger.info("[API] No clients found, returning empty list")
-            return jsonify([])
+        # Determine who is REALLY online (last seen within 2 minutes)
+        now = datetime.utcnow()
+        online_threshold = timedelta(minutes=2)
 
         result = []
         for c in clients:
             try:
+                is_online = (now - c.last_seen) < online_threshold if c.last_seen else False
+                
+                # Auto-update status to Offline if threshold passed
+                if not is_online and c.status == 'Active':
+                    c.status = 'Offline'
+                    db.session.commit()
+
                 # Fallback logic for username and name
                 owner_username = c.owner.username if c.owner else None
                 display_username = owner_username or c.username or "Unknown"
-                
-                # If name is "Unknown" or empty, use username
                 display_name = c.name
                 if not display_name or display_name == "Unknown":
                     display_name = display_username
@@ -515,7 +519,8 @@ def api_clients():
                     "version": c.version or "1.0.0",
                     "last_seen": c.last_seen.isoformat() if c.last_seen else None,
                     "ip": c.ip_address or "0.0.0.0",
-                    "status": c.status or "Offline",
+                    "status": c.status,
+                    "is_online": is_online,
                     "license_expiry": c.license_expiry.isoformat() if c.license_expiry else None
                 }
                 result.append(client_data)
@@ -523,7 +528,6 @@ def api_clients():
                 current_app.logger.error(f"[API] Error serializing client {getattr(c, 'id', 'unknown')}: {e}")
                 continue
                 
-        current_app.logger.info(f"[API] Returning {len(result)} clients")
         return jsonify(result)
     except Exception as e:
         current_app.logger.error(f"[API] Global error in api_clients: {e}", exc_info=True)

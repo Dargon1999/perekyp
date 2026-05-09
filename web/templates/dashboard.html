@@ -157,7 +157,14 @@
             <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
                 <div style="display: flex; align-items: center; gap: 0.5rem; background: rgba(255,255,255,0.05); padding: 0.5rem 1rem; border-radius: 8px;">
                     <label class="switch" style="width: 40px; height: 20px;">
-                        <input type="checkbox" id="showOnlyActiveToggle" onchange="filterLicenseTable()">
+                        <input type="checkbox" id="showOnlyActivatedToggle" onchange="filterLicenseTable()">
+                        <span class="slider round"></span>
+                    </label>
+                    <span style="font-size: 0.9rem;">Show Only Activated</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.5rem; background: rgba(255,255,255,0.05); padding: 0.5rem 1rem; border-radius: 8px;">
+                    <label class="switch" style="width: 40px; height: 20px;">
+                        <input type="checkbox" id="showOnlyActiveToggle" onchange="filterLicenseTable()" checked>
                         <span class="slider round"></span>
                     </label>
                     <span style="font-size: 0.9rem;">Show Only Active</span>
@@ -358,7 +365,8 @@
             else bannedCount++;
 
             const row = document.createElement('tr');
-            row.setAttribute('data-active', lic.is_active); // For filtering
+            row.setAttribute('data-active', lic.is_active); 
+            row.setAttribute('data-activated', lic.login && lic.login !== '-' ? 'true' : 'false'); 
             
             let statusBadge = lic.is_active ? 
                 '<span class="badge badge-success" style="box-shadow: 0 0 10px rgba(46, 204, 113, 0.2);">АКТИВЕН</span>' : 
@@ -423,23 +431,24 @@
         const searchInput = document.getElementById('licenseSearchInput');
         const filter = searchInput.value.toUpperCase();
         const showOnlyActive = document.getElementById('showOnlyActiveToggle').checked;
+        const showOnlyActivated = document.getElementById('showOnlyActivatedToggle').checked;
         const table = document.getElementById('licensesTable');
         const tr = table.getElementsByTagName('tr');
 
         for (let i = 1; i < tr.length; i++) {
             let matchesSearch = false;
-            let matchesStatus = true;
+            let matchesFilters = true;
             
             const tds = tr[i].getElementsByTagName('td');
             const isActive = tr[i].getAttribute('data-active') === 'true';
+            const isActivated = tr[i].getAttribute('data-activated') === 'true';
 
-            // Status filter
-            if (showOnlyActive && !isActive) {
-                matchesStatus = false;
-            }
+            // Filters logic
+            if (showOnlyActive && !isActive) matchesFilters = false;
+            if (showOnlyActivated && !isActivated) matchesFilters = false;
 
             // Search filter (in Key (0) and Login (2))
-            if (matchesStatus) {
+            if (matchesFilters) {
                 const searchCols = [0, 2];
                 for (let j of searchCols) {
                     if (tds[j]) {
@@ -452,7 +461,7 @@
                 }
             }
 
-            tr[i].style.display = (matchesSearch && matchesStatus) ? "" : "none";
+            tr[i].style.display = (matchesSearch && matchesFilters) ? "" : "none";
         }
     }
 
@@ -689,18 +698,16 @@
 
         try {
             const res = await fetch('/api/clients');
-            console.log(`API Response Status: ${res.status}`);
-            
             if (res.ok) {
                 const data = await res.json();
-                console.log(`Successfully loaded ${data.length} clients:`, data);
-                
                 renderTable(data);
                 
-                // Update active clients badge
+                // Count online clients (is_online: true)
+                const onlineCount = data.filter(c => c.is_online).length;
                 const badge = document.getElementById('clientCountBadge');
                 if (badge) {
-                    badge.innerText = `${data.length} Active Clients`;
+                    badge.innerText = `${onlineCount} Online Clients`;
+                    badge.className = onlineCount > 0 ? 'badge badge-success' : 'badge badge-secondary';
                 }
             } else if (res.status === 401) {
                 console.warn("Unauthorized access to API. Redirecting to login or showing error.");
@@ -724,124 +731,72 @@
     function renderTable(data) {
         console.log("Rendering table with data:", data);
         const tbody = document.getElementById('clientTableBody');
-        if (!tbody) {
-            console.error("Critical: 'clientTableBody' element not found!");
-            return;
-        }
+        if (!tbody) return;
         tbody.innerHTML = '';
 
         if (!data || data.length === 0) {
-            console.log("No clients to display.");
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="10" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
-                        Подключенные клиенты не найдены.
-                    </td>
-                </tr>`;
+            tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 3rem; color: var(--text-secondary);">Подключенные клиенты не найдены.</td></tr>';
             return;
         }
 
         const now = new Date();
 
-        data.forEach((client, index) => {
-            try {
-                const row = document.createElement('tr');
-                
-                // Determine status badge class
-                let statusClass = 'badge-secondary';
-                if (client.status === 'Active') statusClass = 'badge-success';
-                else if (client.status === 'Banned') statusClass = 'badge-danger';
-                
-                // Format Last Seen (DD.MM.YYYY HH:MM:SS)
-                let dateStr = "—";
-                if (client.last_seen) {
-                    const lastSeen = new Date(client.last_seen);
-                    if (!isNaN(lastSeen.getTime())) {
-                        dateStr = lastSeen.toLocaleString('ru-RU', { 
-                            day: '2-digit', month: '2-digit', year: 'numeric', 
-                            hour: '2-digit', minute: '2-digit', second: '2-digit' 
-                        });
-                    }
-                }
-
-                // License Logic
-                let licenseBadge = '<span class="badge badge-secondary">Бессрочная</span>';
-                if (client.license_expiry) {
-                    const expiry = new Date(client.license_expiry);
-                    if (!isNaN(expiry.getTime())) {
-                        const diff = expiry - now;
-                        
-                        if (diff < 0) {
-                            licenseBadge = `<span class="badge badge-danger" title="${expiry.toLocaleString('ru-RU')}">Истекла</span>`;
-                        } else {
-                            const totalMinutes = Math.floor(diff / (1000 * 60));
-                            const totalHours = Math.floor(totalMinutes / 60);
-                            const days = Math.floor(totalHours / 24);
-                            const hours = totalHours % 24;
-                            const minutes = totalMinutes % 60;
-
-                            let timeLeftStr = `${days} дней ${hours} часов ${minutes} минут`;
-                            const badgeClass = days < 7 ? 'badge-warning' : 'badge-success';
-                            licenseBadge = `<span class="badge ${badgeClass}" title="${expiry.toLocaleString('ru-RU')}">Активна (${timeLeftStr})</span>`;
-                        }
-                        
-                        // Precise format: DD.MM.YYYY, HH:MM
-                        const day = String(expiry.getDate()).padStart(2, '0');
-                        const month = String(expiry.getMonth() + 1).padStart(2, '0');
-                        const year = expiry.getFullYear();
-                        const hours = String(expiry.getHours()).padStart(2, '0');
-                        const minutes = String(expiry.getMinutes()).padStart(2, '0');
-                        const formattedDate = `${day}.${month}.${year}, ${hours}:${minutes}`;
-                        
-                        licenseBadge += `<br><small style="font-weight: 600; color: var(--text-primary);">${formattedDate}</small>`;
-                    } else {
-                        licenseBadge = '<span class="badge badge-secondary">Ошибка даты</span>';
-                    }
-                }
-
-                row.innerHTML = `
-                    <td style="font-weight: 500; color: var(--text-primary);">${client.id || '—'}</td>
-                    <td>${client.username || 'Неизвестно'}</td>
-                    <td>${client.name || 'Неизвестно'}</td>
-                    <td style="font-family: monospace; font-size: 0.85rem;">
-                        <span title="${client.hwid}">${(client.hwid || '—').slice(0, 8)}...</span>
-                        <button onclick="copyToClipboard('${client.hwid}')" class="btn-icon" title="Копировать HWID">📋</button>
-                    </td>
-                    <td>${licenseBadge}</td>
-                    <td>
-                        <span style="font-family: monospace; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;">
-                            ${client.version || '—'}
-                        </span>
-                    </td>
-                    <td>${dateStr}</td>
-                    <td>
-                        ${client.ip || '—'}
-                        <button onclick="copyToClipboard('${client.ip}')" class="btn-icon" title="Копировать IP">📋</button>
-                    </td>
-                    <td>
-                        <span class="badge ${statusClass}">
-                            ${client.status === 'Active' ? 'В сети' : (client.status === 'Banned' ? 'Забанен' : 'Не в сети')}
-                        </span>
-                    </td>
-                    <td>
-                        <div style="display: flex; gap: 0.25rem;">
-                            <button onclick="openExtendModal('${client.client_id}')" class="btn btn-sm btn-primary" title="Продлить">➕</button>
-                            <button onclick="clientAction('revoke', '${client.client_id}')" class="btn btn-sm btn-warning" title="Аннулировать">🚫</button>
-                            ${client.status === 'Banned' ? 
-                                `<button onclick="clientAction('unban', '${client.client_id}')" class="btn btn-sm btn-success" title="Разбанить">🔓</button>` : 
-                                `<button onclick="clientAction('ban', '${client.client_id}')" class="btn btn-sm btn-danger" title="Забанить">🔨</button>`
-                            }
-                            <button onclick="clientAction('reset_hwid', '${client.client_id}')" class="btn btn-sm btn-secondary" title="Сброс HWID">🔄</button>
-                            <button onclick="clientAction('disconnect', '${client.client_id}')" class="btn btn-sm btn-outline" title="Отключить">🔌</button>
-                        </div>
-                    </td>
-                `;
-                tbody.appendChild(row);
-            } catch (err) {
-                console.error(`Error rendering row ${index}:`, err, client);
+        data.forEach((client) => {
+            const row = document.createElement('tr');
+            
+            // Online indicator
+            let statusBadge = '';
+            if (client.is_online) {
+                statusBadge = '<span class="badge badge-success">В СЕТИ</span>';
+            } else if (client.status === 'Banned') {
+                statusBadge = '<span class="badge badge-danger">ЗАБАНЕН</span>';
+            } else {
+                statusBadge = '<span class="badge badge-secondary">ОФФЛАЙН</span>';
             }
+            
+            // Format Last Seen
+            let dateStr = "—";
+            if (client.last_seen) {
+                const lastSeen = new Date(client.last_seen);
+                dateStr = lastSeen.toLocaleString('ru-RU');
+            }
+
+            // License Logic
+            let licenseBadge = '<span class="badge badge-secondary">Бессрочная</span>';
+            if (client.license_expiry) {
+                const expiry = new Date(client.license_expiry);
+                const diff = expiry - now;
+                if (diff < 0) {
+                    licenseBadge = `<span class="badge badge-danger">Истекла</span>`;
+                } else {
+                    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+                    licenseBadge = `<span class="badge ${days < 7 ? 'badge-warning' : 'badge-success'}">Активна (${days} дн.)</span>`;
+                }
+            }
+
+            row.innerHTML = `
+                <td>${client.id || '—'}</td>
+                <td>${client.username || '—'}</td>
+                <td>${client.name || '—'}</td>
+                <td style="font-family: monospace; font-size: 0.85rem;">${(client.hwid || '—').slice(0, 8)}...</td>
+                <td>${licenseBadge}</td>
+                <td>${client.version || '—'}</td>
+                <td>${dateStr}</td>
+                <td>${client.ip || '—'}</td>
+                <td>${statusBadge}</td>
+                <td>
+                    <div style="display: flex; gap: 0.25rem;">
+                        <button onclick="openExtendModal('${client.client_id}')" class="btn btn-sm btn-primary">➕</button>
+                        <button onclick="clientAction('revoke', '${client.client_id}')" class="btn btn-sm btn-warning">🚫</button>
+                        ${client.status === 'Banned' ? 
+                            `<button onclick="clientAction('unban', '${client.client_id}')" class="btn btn-sm btn-success">🔓</button>` : 
+                            `<button onclick="clientAction('ban', '${client.client_id}')" class="btn btn-sm btn-danger">🔨</button>`
+                        }
+                    </div>
+                </td>
+            `;
+            tbody.appendChild(row);
         });
-        filterTable(); // Re-apply filter if exists
     }
 
     function filterTable() {
