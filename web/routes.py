@@ -677,7 +677,7 @@ def client_disconnect():
 # --- Firestore License Key Management (Point 4) ---
 
 @main_routes.route("/api/licenses")
-def api_licenses():
+def api_licenses_list():
     current_app.logger.info("[API] Fetching licenses from Firestore")
     try:
         is_admin = current_user.is_authenticated
@@ -702,7 +702,7 @@ def api_licenses():
         documents = data.get("documents", [])
         current_app.logger.info(f"[API] Found {len(documents)} licenses in Firestore")
         
-        licenses = []
+        licenses_data = []
         for doc in documents:
             try:
                 # Firestore doc name format: projects/{project}/databases/(default)/documents/keys/{key_id}
@@ -712,23 +712,23 @@ def api_licenses():
                 fields = doc.get("fields", {})
                 
                 # Helper to get field value safely
-                def gv(field_name, type_key, default=None):
+                def get_val(field_name, type_key, default=None):
                     return fields.get(field_name, {}).get(type_key, default)
 
-                licenses.append({
+                licenses_data.append({
                     "key": key_val,
-                    "is_active": gv("is_active", "booleanValue", True),
-                    "hwid": gv("hwid", "stringValue", "-"),
-                    "login": gv("login", "stringValue", "-"),
-                    "expires_at": gv("expires_at", "stringValue"),
-                    "duration_days": gv("duration_days", "integerValue"),
-                    "created_at": gv("created_at", "timestampValue")
+                    "is_active": get_val("is_active", "booleanValue", True),
+                    "hwid": get_val("hwid", "stringValue", "-"),
+                    "login": get_val("login", "stringValue", "-"),
+                    "expires_at": get_val("expires_at", "stringValue"),
+                    "duration_days": get_val("duration_days", "integerValue"),
+                    "created_at": get_val("created_at", "timestampValue")
                 })
             except Exception as doc_err:
                 current_app.logger.error(f"[API] Error parsing document: {doc_err}")
                 continue
             
-        return jsonify(licenses)
+        return jsonify(licenses_data)
     except Exception as e:
         current_app.logger.error(f"[API] Global error in api_licenses: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
