@@ -235,6 +235,7 @@ def upload_update():
         current_app.logger.error(f"Upload failed: {e}")
         return jsonify({"error": str(e)}), 500
 
+@main_routes.route("/client_checkin", methods=["POST"])
 @main_routes.route("/api/client/checkin", methods=["POST"])
 def client_checkin():
     data = request.json
@@ -489,28 +490,28 @@ def api_clients():
         limit = request.args.get('limit', 200, type=int)
         clients = Client.query.order_by(Client.last_seen.desc()).limit(limit).all()
         
-        # Determine who is REALLY online (last seen within 2 minutes)
+        # Determine who is REALLY online (last seen within 3 minutes)
         now = datetime.utcnow()
-        online_threshold = timedelta(minutes=2)
+        online_threshold = timedelta(minutes=3)
 
         result = []
+        needs_commit = False
+        
         for c in clients:
             try:
                 is_online = (now - c.last_seen) < online_threshold if c.last_seen else False
                 
-                # Auto-update status to Offline if threshold passed
+                # Update status to Offline if threshold passed, but don't commit yet
                 if not is_online and c.status == 'Active':
                     c.status = 'Offline'
-                    db.session.commit()
+                    needs_commit = True
 
                 # Fallback logic for username and name
                 owner_username = c.owner.username if c.owner else None
                 display_username = owner_username or c.username or "Unknown"
-                display_name = c.name
-                if not display_name or display_name == "Unknown":
-                    display_name = display_username
+                display_name = c.name or display_username or "Unknown"
 
-                client_data = {
+                result.append({
                     "id": c.id,
                     "client_id": c.client_id,
                     "username": display_username,
@@ -522,11 +523,16 @@ def api_clients():
                     "status": c.status,
                     "is_online": is_online,
                     "license_expiry": c.license_expiry.isoformat() if c.license_expiry else None
-                }
-                result.append(client_data)
+                })
             except Exception as e:
-                current_app.logger.error(f"[API] Error serializing client {getattr(c, 'id', 'unknown')}: {e}")
+                current_app.logger.error(f"[API] Error serializing client: {e}")
                 continue
+        
+        if needs_commit:
+            try:
+                db.session.commit()
+            except:
+                db.session.rollback()
                 
         return jsonify(result)
     except Exception as e:
