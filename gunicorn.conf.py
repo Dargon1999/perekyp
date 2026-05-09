@@ -3,7 +3,7 @@ import multiprocessing
 import os
 
 # Worker settings
-worker_class = 'gevent' # Changed from eventlet for better stability
+worker_class = 'eventlet' # Must match wsgi.py monkey_patch
 workers = 1 # One worker is usually enough for SocketIO on free tier
 timeout = 120 # Higher timeout for startup
 

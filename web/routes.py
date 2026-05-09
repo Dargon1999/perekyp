@@ -689,10 +689,10 @@ def api_licenses_list():
         if not is_admin:
             return jsonify({"error": "Unauthorized"}), 401
 
+        # Using a longer timeout and verified Session
         url = f"{FIREBASE_BASE_URL}/keys?key={FIREBASE_API_KEY}&pageSize=100"
-        # Use a session to avoid potential recursion issues with eventlet/requests
-        session = requests.Session()
-        resp = session.get(url, timeout=10)
+        with requests.Session() as session:
+            resp = session.get(url, timeout=15)
         
         if resp.status_code != 200:
             current_app.logger.error(f"[API] Firestore error: {resp.status_code} - {resp.text}")
@@ -700,38 +700,42 @@ def api_licenses_list():
             
         data = resp.json()
         documents = data.get("documents", [])
-        current_app.logger.info(f"[API] Found {len(documents)} licenses in Firestore")
+        current_app.logger.info(f"[API] Found {len(documents)} documents in Firestore")
         
         licenses_data = []
         for doc in documents:
             try:
-                # Firestore doc name format: projects/{project}/databases/(default)/documents/keys/{key_id}
-                key_val = doc.get("name", "").split("/")[-1]
+                name_path = doc.get("name", "")
+                key_val = name_path.split("/")[-1]
                 if not key_val: continue
                 
                 fields = doc.get("fields", {})
                 
-                # Helper to get field value safely
-                def get_val(field_name, type_key, default=None):
-                    return fields.get(field_name, {}).get(type_key, default)
+                # Manual extraction to be as fast as possible
+                is_active = fields.get("is_active", {}).get("booleanValue", True)
+                hwid = fields.get("hwid", {}).get("stringValue", "-")
+                login_name = fields.get("login", {}).get("stringValue", "-")
+                expires_at = fields.get("expires_at", {}).get("stringValue")
+                duration = fields.get("duration_days", {}).get("integerValue")
+                created = fields.get("created_at", {}).get("timestampValue")
 
                 licenses_data.append({
                     "key": key_val,
-                    "is_active": get_val("is_active", "booleanValue", True),
-                    "hwid": get_val("hwid", "stringValue", "-"),
-                    "login": get_val("login", "stringValue", "-"),
-                    "expires_at": get_val("expires_at", "stringValue"),
-                    "duration_days": get_val("duration_days", "integerValue"),
-                    "created_at": get_val("created_at", "timestampValue")
+                    "is_active": is_active,
+                    "hwid": hwid,
+                    "login": login_name,
+                    "expires_at": expires_at,
+                    "duration_days": duration,
+                    "created_at": created
                 })
             except Exception as doc_err:
-                current_app.logger.error(f"[API] Error parsing document: {doc_err}")
+                current_app.logger.error(f"[API] Skip document {doc.get('name', 'unknown')}: {doc_err}")
                 continue
             
         return jsonify(licenses_data)
     except Exception as e:
-        current_app.logger.error(f"[API] Global error in api_licenses: {str(e)}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.error(f"[API] Global error in api_licenses_list: {str(e)}", exc_info=True)
+        return jsonify({"error": "Internal server error during license fetch"}), 500
 
 @main_routes.route("/api/licenses/create", methods=['POST'])
 @login_required
