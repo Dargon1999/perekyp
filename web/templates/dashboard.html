@@ -14,7 +14,7 @@
                 <span id="refreshIcon">↻</span> Refresh
             </button>
             <span class="badge badge-success" style="font-size: 1rem; padding: 0.5rem 1rem;" id="clientCountBadge">
-                {{ clients|length }} Active Clients
+                0 Active Clients
             </span>
         </div>
     </div>
@@ -131,71 +131,7 @@
                     </tr>
                 </thead>
                 <tbody id="clientTableBody">
-                    {% for client in clients %}
-                    <tr>
-                        <td style="font-weight: 500; color: var(--text-primary);">{{ client.id }}</td>
-                        <td>{{ (client.owner.username if client.owner else client.username) or 'Неизвестно' }}</td>
-                        <td>{{ client.name or 'Неизвестно' }}</td>
-                        <td style="font-family: monospace; font-size: 0.85rem;">
-                            <span title="{{ client.hwid }}">{{ client.hwid[:8] if client.hwid else '—' }}...</span>
-                            <button onclick="copyToClipboard('{{ client.hwid }}')" class="btn-icon" title="Копировать HWID">📋</button>
-                        </td>
-                        <td>
-                            {% if not client.license_expiry %}
-                                <span class="badge badge-secondary">Бессрочная</span>
-                            {% else %}
-                                {% set now = now_utc() %}
-                                {% set diff = (client.license_expiry - now).total_seconds() %}
-                                {% if diff < 0 %}
-                                    <span class="badge badge-danger" title="{{ client.license_expiry.strftime('%d.%m.%Y %H:%M') }}">Истекла</span>
-                                {% else %}
-                                    {% set days = (diff / 86400) | int %}
-                                    {% set hours = ((diff % 86400) / 3600) | int %}
-                                    {% set minutes = ((diff % 3600) / 60) | int %}
-                                    <span class="badge {{ 'badge-warning' if diff < 604800 else 'badge-success' }}" 
-                                          title="{{ client.license_expiry.strftime('%d.%m.%Y %H:%M') }}">
-                                        Активна ({{ days }}д {{ hours }}ч {{ minutes }}м)
-                                    </span>
-                                {% endif %}
-                                <br><small>{{ client.license_expiry.strftime('%d.%m.%Y %H:%M') }}</small>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <span style="font-family: monospace; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;">
-                                {{ client.version }}
-                            </span>
-                        </td>
-                        <td>{{ client.last_seen.strftime('%d.%m.%Y %H:%M:%S') }}</td>
-                        <td>
-                            {{ client.ip_address }}
-                            <button onclick="copyToClipboard('{{ client.ip_address }}')" class="btn-icon" title="Копировать IP">📋</button>
-                        </td>
-                        <td>
-                            <span class="badge {{ 'badge-success' if client.status == 'Active' else ('badge-danger' if client.status == 'Banned' else 'badge-secondary') }}">
-                                {{ 'В сети' if client.status == 'Active' else ('Забанен' if client.status == 'Banned' else 'Не в сети') }}
-                            </span>
-                        </td>
-                        <td>
-                            <div style="display: flex; gap: 0.25rem;">
-                                <button onclick="openExtendModal('{{ client.client_id }}')" class="btn btn-sm btn-primary" title="Продлить">➕</button>
-                                <button onclick="clientAction('revoke', '{{ client.client_id }}')" class="btn btn-sm btn-warning" title="Аннулировать">🚫</button>
-                                {% if client.status == 'Banned' %}
-                                    <button onclick="clientAction('unban', '{{ client.client_id }}')" class="btn btn-sm btn-success" title="Разбанить">🔓</button>
-                                {% else %}
-                                    <button onclick="clientAction('ban', '{{ client.client_id }}')" class="btn btn-sm btn-danger" title="Забанить">🔨</button>
-                                {% endif %}
-                                <button onclick="clientAction('reset_hwid', '{{ client.client_id }}')" class="btn btn-sm btn-secondary" title="Сброс HWID">🔄</button>
-                                <button onclick="clientAction('disconnect', '{{ client.client_id }}')" class="btn btn-sm btn-outline" title="Отключить">🔌</button>
-                            </div>
-                        </td>
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="8" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
-                            No clients connected yet.
-                        </td>
-                    </tr>
-                    {% endfor %}
+                    <tr><td colspan="10" style="text-align: center; padding: 2rem;">Loading clients...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -360,14 +296,21 @@
     // --- License Keys Management (Point 4) ---
 
     async function fetchLicenses() {
+        console.log("Fetching licenses from Firebase API...");
         try {
             const res = await fetch('/api/licenses');
             if (res.ok) {
                 const data = await res.json();
+                console.log(`Successfully loaded ${data.length} licenses`);
                 renderLicenseTable(data);
+            } else {
+                const errText = await res.text();
+                console.error(`Firebase API Error (${res.status}): ${errText}`);
+                showToast(`Ошибка загрузки лицензий: ${res.status}`, "error");
             }
         } catch (e) {
-            console.error('Ошибка получения списка лицензий:', e);
+            console.error('Network error fetching licenses:', e);
+            showToast('Сетевая ошибка при получении списка лицензий', "error");
         }
     }
 
@@ -674,14 +617,27 @@
     }
 
     async function fetchClients() {
+        console.log("Fetching clients from API...");
         try {
             const res = await fetch('/api/clients');
             if (res.ok) {
                 const data = await res.json();
+                console.log(`Successfully loaded ${data.length} clients`);
                 renderTable(data);
+                
+                // Update active clients badge
+                const badge = document.getElementById('clientCountBadge');
+                if (badge) {
+                    badge.innerText = `${data.length} Active Clients`;
+                }
+            } else {
+                const errText = await res.text();
+                console.error(`API Error (${res.status}): ${errText}`);
+                showToast(`Ошибка загрузки клиентов: ${res.status}`, "error");
             }
         } catch (e) {
-            console.error('Ошибка получения списка клиентов:', e);
+            console.error('Network error fetching clients:', e);
+            showToast('Сетевая ошибка при получении списка клиентов', "error");
         }
     }
 
@@ -938,10 +894,17 @@
         }
     }
 
-    // Refresh every 30 seconds
-    setInterval(fetchClients, 30000);
+    // Initial fetch
+    console.log("Dashboard loaded, initializing data fetch...");
     fetchClients();
     fetchLicenses();
+    
+    // Refresh every 30 seconds
+    setInterval(() => {
+        console.log("Auto-refreshing dashboard data...");
+        fetchClients();
+        fetchLicenses();
+    }, 30000);
 
     // --- Server Management Logic (Existing) ---
 

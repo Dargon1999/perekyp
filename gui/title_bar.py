@@ -73,25 +73,6 @@ class CustomTitleBar(QWidget):
         self.active_profile_label.setStyleSheet("font-weight: bold; margin-right: 10px;")
         self.layout.addWidget(self.active_profile_label)
 
-        # Disconnect Button (Point 3)
-        self.disconnect_btn = QPushButton("🔌 Отключить")
-        self.disconnect_btn.setObjectName("TitleBarButton")
-        self.disconnect_btn.setFixedHeight(40)
-        self.disconnect_btn.setMinimumWidth(120)
-        self.disconnect_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.disconnect_btn.setStyleSheet("""
-            QPushButton {
-                background-color: rgba(231, 76, 60, 0.1);
-                color: #e74c3c;
-                border: 1px solid rgba(231, 76, 60, 0.3);
-            }
-            QPushButton:hover {
-                background-color: #e74c3c;
-                color: white;
-            }
-        """)
-        self.layout.addWidget(self.disconnect_btn)
-
         # Global Balance Label
         self.balance_label = QLabel("💳 $0")
         self.balance_label.setObjectName("BalanceLabel")
