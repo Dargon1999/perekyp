@@ -61,11 +61,15 @@ def get_server_settings():
 @main_routes.route('/update_info', methods=['GET'])
 def update_info():
     """
-    Returns update metadata. Optimized to use DB values instead of 
-    recalculating file hash on every request to prevent server hanging.
+    Returns update metadata. Supports priority versioning (stable vs latest).
     """
     settings = get_server_settings()
     base_url = request.url_root.rstrip('/')
+    
+    # Determine which version to serve based on priority
+    # If priority is 'stable', we serve stable_version
+    # If priority is 'latest', we serve current_version
+    target_version = settings.stable_version if settings.priority_version == 'stable' else settings.current_version
     
     # Use metadata from DB (populated during upload)
     final_signature = settings.last_upload_hash
@@ -73,42 +77,15 @@ def update_info():
     final_date = settings.last_upload_date.isoformat() if settings.last_upload_date else None
     final_notes = settings.last_upload_notes or "Update highly recommended for stability and new features."
     
-    # Fallback: If DB is empty but file exists, calculate ONCE and potentially update DB
-    if not final_signature:
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        update_dir = os.path.join(base_dir, UPDATE_FOLDER)
-        file_path = os.path.join(update_dir, UPDATE_FILENAME)
-        
-        if os.path.exists(file_path):
-            try:
-                current_app.logger.info("Calculating update metadata for the first time...")
-                file_size = os.path.getsize(file_path)
-                h = hashlib.sha256()
-                with open(file_path, 'rb') as f:
-                    for chunk in iter(lambda: f.read(8192), b''):
-                        h.update(chunk)
-                
-                final_signature = h.hexdigest()
-                final_size = file_size
-                final_date = datetime.fromtimestamp(os.path.getmtime(file_path)).isoformat()
-                
-                # Update DB so we don't do this again
-                if hasattr(settings, 'id'): # Check if it's a real DB object
-                    settings.last_upload_hash = final_signature
-                    settings.last_upload_size = final_size
-                    settings.last_upload_date = datetime.fromtimestamp(os.path.getmtime(file_path))
-                    db.session.commit()
-            except Exception as e:
-                current_app.logger.error(f"On-the-fly metadata calculation failed: {e}")
-
     return jsonify({
-        "version": settings.current_version,
+        "version": target_version,
         "force_update": settings.force_update,
         "download_url": f"{base_url}/download",
         "signature": final_signature,
         "size": final_size,
         "publish_date": final_date,
-        "notes": final_notes
+        "notes": final_notes,
+        "priority": settings.priority_version
     })
 
 @main_routes.route('/download')
@@ -135,18 +112,31 @@ def download_update():
         current_app.logger.error(f"File {filename} not found at {file_path} or {fallback_path}")
         return jsonify({"error": f"File {filename} not found."}), 404
 
-@main_routes.route('/api/force_update', methods=['POST'])
-def force_update():
-    # Allow access with session cookie OR secret header
-    is_admin = current_user.is_authenticated
-    if not is_admin:
-        secret = request.headers.get('X-Admin-Key')
-        if secret == 'dargon_admin_secret_2024':
-            is_admin = True
-    
-    if not is_admin:
-        return jsonify({"error": "Unauthorized"}), 401
+@main_routes.route('/api/force_hotfix', methods=['POST'])
+@login_required
+def force_hotfix():
+    """
+    Forces an update for clients even if their version matches.
+    Useful for distributing fixes within the same version number.
+    """
+    try:
+        settings = get_server_settings()
+        # Increment last upload date to trigger 'newer than local' check
+        settings.last_upload_date = datetime.utcnow()
+        # Potentially change hash slightly to ensure client sees it as new
+        if settings.last_upload_hash:
+             # Just a marker that something changed
+             settings.last_upload_hash = settings.last_upload_hash[:60] + secrets.token_hex(2)
+             
+        db.session.commit()
+        log_admin_action("Force Hotfix", "All", "Triggered re-download for current version")
+        return jsonify({"status": "ok", "msg": "Hotfix triggered. Clients will re-download the update."})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
+@main_routes.route('/api/force_update', methods=['POST'])
+@login_required
+def force_update():
     settings = get_server_settings()
     data = request.json
     if data and 'force' in data:
@@ -155,34 +145,41 @@ def force_update():
         settings.force_update = not settings.force_update
         
     db.session.commit()
+    log_admin_action("Toggle Force Update", "All", f"Enabled: {settings.force_update}")
     return jsonify({"status": "ok", "force_update": settings.force_update})
 
-@main_routes.route('/api/set_version', methods=['POST'])
+@main_routes.route("/api/set_version", methods=['POST'])
 @login_required
 def set_version():
     data = request.json
+    if not data:
+        return jsonify({"error": "Missing data"}), 400
+        
     version = data.get('version')
+    stable_version = data.get('stable_version')
+    priority = data.get('priority') # 'stable' or 'latest'
+    
+    settings = get_server_settings()
     if version:
-        settings = get_server_settings()
         settings.current_version = version
-        db.session.commit()
-        return jsonify({"status": "ok", "version": settings.current_version})
-    return jsonify({"error": "Missing version"}), 400
+    if stable_version:
+        settings.stable_version = stable_version
+    if priority in ['stable', 'latest']:
+        settings.priority_version = priority
+        
+    db.session.commit()
+    return jsonify({
+        "status": "ok", 
+        "current_version": settings.current_version,
+        "stable_version": settings.stable_version,
+        "priority": settings.priority_version
+    })
 
 @main_routes.route('/api/upload_update', methods=['POST'])
+@login_required
 def upload_update():
     """Secure API for uploading a new version with metadata auto-generation."""
     try:
-        # Authorization check (Admin key or Session)
-        is_admin = current_user.is_authenticated
-        if not is_admin:
-            secret = request.headers.get('X-Admin-Key')
-            if secret == 'dargon_admin_secret_2024':
-                is_admin = True
-                
-        if not is_admin:
-            return jsonify({"error": "Unauthorized"}), 401
-
         if 'file' not in request.files:
             return jsonify({"error": "No file part"}), 400
             
@@ -522,21 +519,11 @@ def health():
     return jsonify({"status": "healthy", "timestamp": datetime.utcnow()})
 
 @main_routes.route("/api/clients")
+@login_required
 def api_clients():
-    # Allow access with session cookie OR secret header
+    # Admin session required via @login_required
     current_app.logger.info("[API] /api/clients requested")
     try:
-        is_admin = current_user.is_authenticated
-        
-        if not is_admin:
-            secret = request.headers.get('X-Admin-Key')
-            if secret == 'dargon_admin_secret_2024': # Hardcoded secret for GUI client
-                is_admin = True
-        
-        if not is_admin:
-            current_app.logger.warning("[API] Unauthorized access attempt to /api/clients")
-            return jsonify({"error": "Unauthorized"}), 401
-
         # Optimization: Sort by ID ASC to keep positions stable
         limit = request.args.get('limit', 200, type=int)
         clients = Client.query.order_by(Client.id.asc()).limit(limit).all()
@@ -745,18 +732,10 @@ def client_disconnect():
 # --- Firestore License Key Management (Point 4) ---
 
 @main_routes.route("/api/licenses")
+@login_required
 def api_licenses_list():
     current_app.logger.info("[API] Fetching licenses from Firestore")
     try:
-        is_admin = current_user.is_authenticated
-        if not is_admin:
-             secret = request.headers.get('X-Admin-Key')
-             if secret == 'dargon_admin_secret_2024':
-                 is_admin = True
-        
-        if not is_admin:
-            return jsonify({"error": "Unauthorized"}), 401
-
         # Using a longer timeout and verified Session
         url = f"{FIREBASE_BASE_URL}/keys?key={FIREBASE_API_KEY}&pageSize=100"
         with requests.Session() as session:
@@ -903,8 +882,14 @@ def api_license_ban():
 @login_required
 def api_license_extend():
     data = request.json
+    if not data:
+        return jsonify({"error": "Missing request body"}), 400
+        
     key = data.get('key')
     days = data.get('days') # None for Lifetime
+    
+    if not key:
+        return jsonify({"error": "Missing license key"}), 400
     
     try:
         new_expire = ""
@@ -915,6 +900,7 @@ def api_license_extend():
             get_url = f"{FIREBASE_BASE_URL}/keys/{key}?key={FIREBASE_API_KEY}"
             get_resp = requests.get(get_url, timeout=10)
             if get_resp.status_code != 200:
+                current_app.logger.error(f"License {key} not found: {get_resp.text}")
                 return jsonify({"error": "License not found"}), 404
             
             fields = get_resp.json().get("fields", {})
@@ -938,7 +924,11 @@ def api_license_extend():
         if resp.status_code == 200:
             log_admin_action("Extend License", key, f"New Expiry: {new_expire}")
             return jsonify({"status": "ok", "new_expiry": new_expire})
-        return jsonify({"error": resp.text}), resp.status_code
+        
+        # Log firebase error details
+        current_app.logger.error(f"Firebase patch error: {resp.text}")
+        return jsonify({"error": f"Firebase error {resp.status_code}"}), resp.status_code
     except Exception as e:
+        current_app.logger.error(f"Global error in api_license_extend: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 

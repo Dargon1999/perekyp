@@ -43,7 +43,9 @@ class AdminLog(db.Model):
 
 class ServerSettings(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    current_version = db.Column(db.String(20), default="1.0.2")
+    current_version = db.Column(db.String(20), default="1.0.4")
+    stable_version = db.Column(db.String(20), default="1.0.3")
+    priority_version = db.Column(db.String(20), default="stable") # 'stable' or 'latest'
     force_update = db.Column(db.Boolean, default=False)
     download_url = db.Column(db.String(200), default="/download")
     

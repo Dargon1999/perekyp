@@ -67,13 +67,21 @@ class UpdateWorker(QThread):
 
             # 2. Check for updates
             update_url = f"{self.server_url}/update_info"
-            resp = requests.get(update_url, timeout=5)
+            resp = requests.get(update_url, timeout=10) # Increased timeout
             if resp.status_code == 200:
                 data = resp.json()
-                data["is_manual"] = self.is_manual  # Inject is_manual flag
+                data["is_manual"] = self.is_manual
+                
+                # Enhanced logic for same-version hotfixes
+                server_ver = data.get("version")
+                server_hash = data.get("signature")
+                
+                # Check if this is a hotfix (same version but force_update or priority='latest')
+                # Or we can just let on_check_finished handle it
                 self.check_finished.emit(True, data)
             else:
-                self.check_finished.emit(False, {"is_manual": self.is_manual})
+                logging.error(f"[UpdateWorker] Server returned {resp.status_code}: {resp.text}")
+                self.check_finished.emit(False, {"error": f"Ошибка сервера: {resp.status_code}", "is_manual": self.is_manual})
         except requests.exceptions.ConnectionError:
             self.check_finished.emit(False, {"error": "Ошибка подключения к серверу. Проверьте интернет или настройки URL.", "is_manual": self.is_manual})
         except requests.exceptions.Timeout:
@@ -438,8 +446,15 @@ class UpdateManager(QObject):
                     should_update = True
 
             if force and server_ver:
-                 logging.info(f"[UpdateManager] Force update active. Re-validating version {server_ver}")
+                 logging.info(f"[UpdateManager] Force update active. Triggering update for version {server_ver}")
                  should_update = True
+                 
+            # Priority-based hotfix: if priority is 'latest' and version matches current version,
+            # we check if force_update is on or just allow it if manual
+            if not should_update and server_ver == self.current_version and data.get("priority") == 'latest':
+                if is_manual:
+                    logging.info("[UpdateManager] Hotfix check: same version but priority is latest. Offering update.")
+                    should_update = True
 
             if should_update:
                 self._log_event(f"Update available: {server_ver} (Force: {force})")
