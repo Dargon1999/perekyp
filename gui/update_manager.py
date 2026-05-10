@@ -696,9 +696,15 @@ try {{
     Start-Sleep -Seconds 5
     
     # 4. Restart application
+    Write-Log "Clearing PyInstaller environment variables to avoid DLL load errors..."
+    $env:PYTHONPATH = $null
+    $env:PYTHONHOME = $null
+    $env:_MEIPASS = $null
+    
+    Write-Log "Launching: {current_exe.replace('\\', '\\\\')}"
     Start-Process -FilePath "{current_exe.replace('\\', '\\\\')}"
     
-    # Clean up backup on success after a short delay (optional, but keep it for safety during restart)
+    # Clean up backup on success after a short delay
     Start-Sleep -Seconds 2
     if (Test-Path "{backup_exe.replace('\\', '\\\\')}") {{
         Remove-Item "{backup_exe.replace('\\', '\\\\')}" -Force
