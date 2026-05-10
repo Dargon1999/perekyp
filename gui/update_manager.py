@@ -67,17 +67,17 @@ class UpdateWorker(QThread):
 
             # 2. Check for updates
             update_url = f"{self.server_url}/update_info"
-            resp = requests.get(update_url, timeout=10) # Increased timeout
+            resp = requests.get(update_url, timeout=15) # Increased timeout
             if resp.status_code == 200:
                 data = resp.json()
                 data["is_manual"] = self.is_manual
                 
-                # Enhanced logic for same-version hotfixes
+                # Check for same-version hotfix (force update or priority latest)
                 server_ver = data.get("version")
-                server_hash = data.get("signature")
+                force = data.get("force_update", False)
                 
-                # Check if this is a hotfix (same version but force_update or priority='latest')
-                # Or we can just let on_check_finished handle it
+                # If it's a force update or same version with hotfix trigger, we ensure signature is handled
+                # The on_check_finished handles the comparison logic
                 self.check_finished.emit(True, data)
             else:
                 logging.error(f"[UpdateWorker] Server returned {resp.status_code}: {resp.text}")
@@ -405,6 +405,7 @@ class UpdateManager(QObject):
         if success:
             server_ver = data.get("version")
             force = data.get("force_update", False)
+            server_hash = data.get("signature")
             
             logging.info(f"[UpdateManager] Check result: Server={server_ver}, Local={self.current_version}, Force={force}, Manual={is_manual}")
             
@@ -413,8 +414,6 @@ class UpdateManager(QObject):
             # Semantic version comparison
             try:
                 def parse_version(v):
-                    # Robust semantic versioning parser (MAJOR.MINOR.PATCH)
-                    # Removes any prefix like 'v' or suffix like '-beta'
                     v_clean = v.lower().strip().lstrip('v').split('-')[0].split('+')[0]
                     parts = []
                     for x in v_clean.split('.'):
@@ -422,7 +421,6 @@ class UpdateManager(QObject):
                             parts.append(int(x))
                         except ValueError:
                             parts.append(0)
-                    # Ensure at least 3 parts (major, minor, patch)
                     while len(parts) < 3:
                         parts.append(0)
                     return parts[:3]
@@ -441,39 +439,38 @@ class UpdateManager(QObject):
                     logging.info(f"[UpdateManager] Local version is newer or equal: Server {server_ver} <= Local {self.current_version}")
             except Exception as e:
                 logging.error(f"[UpdateManager] Version comparison error: {e}")
-                # Fallback to simple equality check
                 if server_ver and server_ver != self.current_version:
                     should_update = True
 
+            # Point 1 & 2: Handle Force Update and Hotfixes
             if force and server_ver:
-                 logging.info(f"[UpdateManager] Force update active. Triggering update for version {server_ver}")
+                 logging.info(f"[UpdateManager] Force update active via server flag.")
                  should_update = True
                  
-            # Priority-based hotfix: if priority is 'latest' and version matches current version,
-            # we check if force_update is on or just allow it if manual
-            if not should_update and server_ver == self.current_version and data.get("priority") == 'latest':
-                if is_manual:
+            # Priority-based hotfix or same-version re-download
+            if not should_update and server_ver == self.current_version:
+                if data.get("priority") == 'latest' and is_manual:
                     logging.info("[UpdateManager] Hotfix check: same version but priority is latest. Offering update.")
+                    should_update = True
+                elif force:
+                    logging.info("[UpdateManager] Hotfix check: same version but FORCE is active. Forcing re-download.")
                     should_update = True
 
             if should_update:
                 self._log_event(f"Update available: {server_ver} (Force: {force})")
+                # Ensure signature is passed to data for DownloadWorker
+                data["signature"] = server_hash 
                 self.update_available.emit(data)
                 result_info["update_found"] = True
                 result_info["server_version"] = server_ver
             elif is_manual:
-                # If no update was found but it's a manual check, provide the message
                 if not result_info["message"]:
                     result_info["message"] = "у вас установлена последняя версия и обновления не требуется"
-                
-                print(f"[UpdateManager] {result_info['message']}")
                 self._log_event(result_info["message"])
                 result_info["server_version"] = server_ver
             else:
-                print("[UpdateManager] No update needed.")
                 self._log_event("No update needed")
                 
-            # Check for global resources (photos)
             resources = data.get("resources", {})
             self.sync_resources(resources)
         else:
@@ -481,7 +478,6 @@ class UpdateManager(QObject):
             logging.error(f"[UpdateManager] Check failed: {error_msg}")
             result_info["message"] = f"Ошибка проверки: {error_msg}"
             
-        # Emit completion signal
         self.check_completed.emit(result_info)
             
     def download_and_install_update(self, download_url=None, force_update=False, notes=None, signature=None):

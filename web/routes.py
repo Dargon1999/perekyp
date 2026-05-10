@@ -121,17 +121,32 @@ def force_hotfix():
     """
     try:
         settings = get_server_settings()
-        # Increment last upload date to trigger 'newer than local' check
-        settings.last_upload_date = datetime.utcnow()
-        # Potentially change hash slightly to ensure client sees it as new
-        if settings.last_upload_hash:
-             # Just a marker that something changed
-             settings.last_upload_hash = settings.last_upload_hash[:60] + secrets.token_hex(2)
+        
+        # 1. Recalculate hash of the current update file
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        update_dir = os.path.join(base_dir, UPDATE_FOLDER)
+        file_path = os.path.join(update_dir, UPDATE_FILENAME)
+        
+        if os.path.exists(file_path):
+             h = hashlib.sha256()
+             with open(file_path, 'rb') as f:
+                 for chunk in iter(lambda: f.read(8192), b''):
+                     h.update(chunk)
+             new_hash = h.hexdigest()
+             file_size = os.path.getsize(file_path)
              
-        db.session.commit()
-        log_admin_action("Force Hotfix", "All", "Triggered re-download for current version")
-        return jsonify({"status": "ok", "msg": "Hotfix triggered. Clients will re-download the update."})
+             settings.last_upload_hash = new_hash
+             settings.last_upload_size = file_size
+             settings.last_upload_date = datetime.utcnow()
+             
+             db.session.commit()
+             log_admin_action("Force Hotfix", "All", f"Manifest updated. Hash: {new_hash[:8]}...")
+             return jsonify({"status": "ok", "msg": "Хотфикс успешно запущен. Манифест обновлен на основе текущего файла."})
+        else:
+             return jsonify({"error": "Файл обновления не найден на сервере. Сначала загрузите .exe"}), 404
+             
     except Exception as e:
+        current_app.logger.error(f"Hotfix error: {e}")
         return jsonify({"error": str(e)}), 500
 
 @main_routes.route('/api/force_update', methods=['POST'])

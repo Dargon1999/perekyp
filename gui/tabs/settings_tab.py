@@ -1213,10 +1213,26 @@ class SettingsTab(QWidget):
         self.status_icon_lbl.setText("⏳")
         self.download_btn.setVisible(False)
         
-        self.update_manager = UpdateManager(self.data_manager, VERSION, self.auth_manager)
-        self.update_manager.check_completed.connect(self.on_update_check_finished)
-        self.update_manager.update_error.connect(self.on_update_error)
-        self.update_manager.check_for_updates_async(is_manual=True)
+        # Use existing manager from main window if available, or create new
+        mgr = None
+        if hasattr(self.main_window, 'update_manager') and self.main_window.update_manager:
+            mgr = self.main_window.update_manager
+        else:
+            self.update_manager = UpdateManager(self.data_manager, VERSION, self.auth_manager)
+            mgr = self.update_manager
+
+        # Ensure signals are connected to this tab's UI
+        try:
+            mgr.check_completed.disconnect(self.on_update_check_finished)
+        except: pass
+        mgr.check_completed.connect(self.on_update_check_finished)
+        
+        try:
+            mgr.update_error.disconnect(self.on_update_error)
+        except: pass
+        mgr.update_error.connect(self.on_update_error)
+        
+        mgr.check_for_updates_async(is_manual=True)
 
     def on_update_check_finished(self, result):
         self.check_update_btn.setEnabled(True)

@@ -895,9 +895,27 @@ class MainWindow(ResizeMixin, QMainWindow):
 
     def on_update_available(self, version_info):
         try:
+            # Point 3 & 4: Handle Force Update and Optional Update Dialog
+            is_forced = version_info.get('force_update', False)
+            
             dialog = UpdateConfirmDialog(self, version_info)
-            if dialog.exec():
-                self.start_update(version_info)
+            if is_forced:
+                # Disable "Later" button for forced updates to block functionality
+                if hasattr(dialog, 'btn_no'):
+                    dialog.btn_no.setEnabled(False)
+                    dialog.btn_no.setToolTip("Это обновление обязательно для продолжения работы.")
+                
+                # Block until update starts or app closes
+                if dialog.exec():
+                    self.start_update(version_info)
+                else:
+                    # If user closes dialog without updating a forced release, exit app
+                    logging.info("Forced update rejected, closing application.")
+                    self.force_quit()
+            else:
+                # Regular update - user can choose "Later"
+                if dialog.exec():
+                    self.start_update(version_info)
         except Exception as e:
             logging.error(f"Error showing update dialog: {e}")
 
