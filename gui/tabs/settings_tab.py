@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QStackedWidget, QFrame, QMessageBox, QListWidget, 
     QListWidgetItem, QComboBox, QCheckBox, QScrollArea, QGroupBox,
     QGridLayout, QButtonGroup, QRadioButton, QGraphicsOpacityEffect,
-    QFileDialog, QTabWidget, QTextEdit, QApplication
+    QFileDialog, QTabWidget, QTextEdit, QApplication, QDialog
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QPropertyAnimation, QEasingCurve, QTimer
 from PyQt6.QtGui import QIcon, QColor, QPainter, QPixmap
@@ -125,11 +125,22 @@ class SettingsTab(QWidget):
         # --- Top Navigation Bar ---
         self.nav_frame = QFrame()
         self.nav_frame.setObjectName("NavFrame")
-        self.nav_frame.setFixedHeight(60)
+        self.nav_frame.setFixedHeight(70)
+        self.nav_frame.setStyleSheet("background-color: #1a1a1a; border-bottom: 1px solid #333;")
         
-        nav_layout = QHBoxLayout(self.nav_frame)
-        nav_layout.setContentsMargins(10, 0, 10, 0)
-        nav_layout.setSpacing(10)
+        # Use a scroll area for navigation buttons to prevent clipping
+        nav_scroll = QScrollArea()
+        nav_scroll.setWidgetResizable(True)
+        nav_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        nav_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        nav_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        nav_scroll.setStyleSheet("background: transparent;")
+        
+        nav_content = QWidget()
+        nav_content.setStyleSheet("background: transparent;")
+        nav_layout = QHBoxLayout(nav_content)
+        nav_layout.setContentsMargins(15, 5, 15, 5)
+        nav_layout.setSpacing(12)
         
         self.nav_group = QButtonGroup(self)
         self.nav_group.setExclusive(True)
@@ -152,38 +163,48 @@ class SettingsTab(QWidget):
             btn = QPushButton(text)
             btn.setCheckable(True)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setFixedHeight(40)
+            btn.setFixedHeight(45)
+            btn.setMinimumWidth(110)
             
             # Modern Tab Style
             btn.setStyleSheet("""
                 QPushButton {
-                    border: none;
-                    border-radius: 8px;
-                    padding: 5px 15px;
-                    color: #95a5a6;
-                    font-weight: 600;
-                    font-size: 14px;
-                    background: transparent;
+                    border: 1px solid rgba(255,255,255,0.05);
+                    border-radius: 10px;
+                    padding: 8px 18px;
+                    color: #bdc3c7;
+                    font-weight: 700;
+                    font-size: 13px;
+                    background: rgba(255,255,255,0.03);
                     text-align: center;
                 }
                 QPushButton:hover {
-                    color: #ecf0f1;
-                    background: rgba(255, 255, 255, 0.05);
+                    color: #fff;
+                    background: rgba(52, 152, 219, 0.15);
+                    border: 1px solid #3498db;
                 }
                 QPushButton:checked {
                     background-color: #3498db;
                     color: white;
+                    border: 1px solid #3498db;
                 }
             """)
             
             if os.path.exists(icon_path):
                 btn.setIcon(QIcon(icon_path))
+                btn.setIconSize(QSize(18, 18))
                 
             self.nav_group.addButton(btn, idx)
             nav_layout.addWidget(btn)
             self.nav_buttons[idx] = btn
             
         nav_layout.addStretch()
+        nav_scroll.setWidget(nav_content)
+        
+        top_layout = QVBoxLayout(self.nav_frame)
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        top_layout.addWidget(nav_scroll)
+        
         self.main_layout.addWidget(self.nav_frame)
         
         # --- Content Area ---
@@ -373,6 +394,33 @@ class SettingsTab(QWidget):
         self.theme_combo.currentIndexChanged.connect(self.on_theme_changed)
         theme_layout.addWidget(self.theme_combo)
         layout.addLayout(theme_layout)
+
+        # Quick Link to Info Page
+        info_link_layout = QHBoxLayout()
+        info_link_layout.setContentsMargins(0, 10, 0, 10)
+        
+        info_btn = QPushButton("ℹ️ Справка и история изменений")
+        info_btn.setFixedHeight(45)
+        info_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        info_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(52, 152, 219, 0.1);
+                color: #3498db;
+                border: 1px solid #3498db;
+                border-radius: 8px;
+                font-weight: bold;
+                font-size: 14px;
+                padding: 0 20px;
+            }
+            QPushButton:hover {
+                background-color: #3498db;
+                color: white;
+            }
+        """)
+        info_btn.clicked.connect(lambda: self.nav_group.button(6).click())
+        info_link_layout.addWidget(info_btn)
+        info_link_layout.addStretch()
+        layout.addLayout(info_link_layout)
         
         # --- Interactive Color Palette ---
         palette_group = QGroupBox("Интерактивная цветовая палитра (Акцент)")
@@ -1897,24 +1945,76 @@ class SettingsTab(QWidget):
 
         # 📖 3. Interactive Help & Navigation
         help_card = QFrame()
-        help_card.setStyleSheet("background: #0f172a; border-radius: 16px; padding: 20px;")
+        help_card.setStyleSheet("background: #0f172a; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05);")
         help_lay = QHBoxLayout(help_card)
+        help_lay.setContentsMargins(25, 20, 25, 20)
         
         msg_lbl = QLabel("Нужна помощь в освоении системы?")
-        msg_lbl.setStyleSheet("font-weight: 700; color: #f8fafc; font-size: 15px;")
+        msg_lbl.setStyleSheet("font-weight: 700; color: #f8fafc; font-size: 15px; background: transparent;")
         help_lay.addWidget(msg_lbl)
         help_lay.addStretch()
         
-        faq_btn = QPushButton("Открыть FAQ")
-        faq_btn.setFixedSize(140, 40)
-        faq_btn.setStyleSheet("background: #3b82f6; color: white; font-weight: 800; border-radius: 10px;")
+        # FAQ Button
+        faq_btn = QPushButton("История FAQ")
+        faq_btn.setFixedSize(160, 45)
+        faq_btn.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        faq_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        faq_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3b82f6;
+                color: #ffffff;
+                font-weight: 800;
+                font-size: 14px;
+                border: 2px solid rgba(255, 255, 255, 0.3);
+                border-radius: 12px;
+                padding: 5px;
+            }
+            QPushButton:hover {
+                background-color: #2563eb;
+                border: 2px solid #ffffff;
+            }
+            QPushButton:pressed {
+                background-color: #1e40af;
+                padding-top: 7px;
+                padding-left: 7px;
+            }
+        """)
         faq_btn.clicked.connect(self.show_faq)
         help_lay.addWidget(faq_btn)
+        
+        # Changelog Button
+        changelog_btn = QPushButton("История изменений")
+        changelog_btn.setFixedSize(180, 45)
+        changelog_btn.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        changelog_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        changelog_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #10b981;
+                color: #ffffff;
+                font-weight: 800;
+                font-size: 14px;
+                border: 2px solid rgba(255, 255, 255, 0.3);
+                border-radius: 12px;
+                padding: 5px;
+                margin-left: 10px;
+            }
+            QPushButton:hover {
+                background-color: #059669;
+                border: 2px solid #ffffff;
+            }
+            QPushButton:pressed {
+                background-color: #047857;
+                padding-top: 7px;
+                padding-left: 7px;
+            }
+        """)
+        changelog_btn.clicked.connect(self.show_changelog)
+        help_lay.addWidget(changelog_btn)
         
         content_layout.addWidget(help_card)
         
         # Footer
-        footer_lbl = QLabel(f"MoneyTracker Modern UI • 2026 • Build 1.0.0")
+        footer_lbl = QLabel(f"MoneyTracker Modern UI • 2026 • Build 1.0.4")
         footer_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         footer_lbl.setStyleSheet("color: #475569; font-size: 11px; margin-top: 10px;")
         content_layout.addWidget(footer_lbl)
@@ -1926,30 +2026,185 @@ class SettingsTab(QWidget):
         self.content_stack.addWidget(page)
 
     def show_changelog(self):
-        msg = f"""<b>История обновлений {VERSION}:</b><br><br>
-        • 🚀 Полностью обновлен интерфейс настроек связи<br>
-        • 🛠️ Исправлена видимость стрелок в темной теме (Фарм БП)<br>
-        • 🛡️ Расширена панель администратора (Мониторинг ПК, SMS Центр)<br>
-        • 📖 Улучшен раздел информации и документации<br>
-        • 🔗 Добавлена интеграция с Discord Webhook для отчетов<br>
-        • 📂 Добавлено отображение абсолютных путей сохранения"""
-        QMessageBox.information(self, "Чейнджлог", msg)
+        import platform
+        from datetime import datetime
+        logging.info("Opening Changelog Dialog...")
+        
+        try:
+            # System Info
+            os_info = f"{platform.system()} {platform.release()} (v{platform.version()})"
+            last_update = "10.05.2026" 
+            license_status = "Активна"
+            if self.auth_manager and hasattr(self.auth_manager, 'last_expires_at'):
+                license_status = "Активна" if self.auth_manager.last_expires_at else "Неизвестно"
+
+            msg = f"""<div style='font-family: Segoe UI, sans-serif; line-height: 160%; color: #ecf0f1;'>
+            <h2 style='color: #3498db; margin-bottom: 20px;'>📜 Информация о системе и история изменений</h2>
+            
+            <div style='background: #1a1a1a; padding: 25px; border-radius: 12px; border: 1px solid #333; margin-bottom: 30px;'>
+                <table style='width: 100%; color: #ecf0f1; font-size: 14px;'>
+                    <tr><td style='padding: 5px 0;'><b>Версия программы:</b></td><td style='color: #3498db;'>{VERSION}</td></tr>
+                    <tr><td style='padding: 5px 0;'><b>ОС:</b></td><td>{os_info}</td></tr>
+                    <tr><td style='padding: 5px 0;'><b>Последнее обновление:</b></td><td>{last_update}</td></tr>
+                    <tr><td style='padding: 5px 0;'><b>Статус лицензии:</b></td><td style='color: #2ecc71;'>{license_status}</td></tr>
+                </table>
+            </div>
+
+            <h3 style='color: #fff; margin-bottom: 15px;'>История обновлений:</h3>
+            
+            <div style='background: #2c3e50; padding: 20px; border-radius: 10px; border-left: 5px solid #3498db; margin-bottom: 20px;'>
+                <b style='color: #fff; font-size: 16px;'>v1.0.4</b> <span style='color: #95a5a6; font-size: 12px;'>(Текущая • 10.05.2026)</span><br><br>
+                <span style='color: #3498db;'>•</span> <b>UI/UX:</b> Увеличены размеры информационных окон до 800x600 для удобства чтения.<br>
+                <span style='color: #3498db;'>•</span> <b>UI/UX:</b> Добавлена возможность развернуть окна на весь экран.<br>
+                <span style='color: #3498db;'>•</span> <b>UI/UX:</b> Реализована плавная вертикальная прокрутка контента.<br>
+                <span style='color: #e74c3c;'>•</span> <b>FIX:</b> Исправлен импорт QDialog (фикс неработающих кнопок).<br>
+                <span style='color: #2ecc71;'>•</span> <b>NEW:</b> Улучшен раздел системной информации и проверка обновлений.
+            </div>
+
+            <div style='background: #1e293b; padding: 15px; border-radius: 8px; border-left: 5px solid #7f8c8d; margin-bottom: 20px;'>
+                <b style='color: #f1f5f9;'>v1.0.3</b> <span style='color: #95a5a6; font-size: 11px;'>(15.04.2026)</span><br>
+                • Добавлен модуль "Рыбалка" и сравнение снастей.<br>
+                • Оптимизация сетевых запросов к Firebase.
+            </div>
+
+            <div style='background: #1e293b; padding: 15px; border-radius: 8px; border-left: 5px solid #7f8c8d;'>
+                <b style='color: #f1f5f9;'>v1.0.0</b> <span style='color: #95a5a6; font-size: 11px;'>(01.01.2026)</span><br>
+                • Базовая реализация системы мониторинга и управления капиталом.
+            </div>
+            </div>"""
+            
+            dlg = StyledDialogBase(self, "Системная информация")
+            # Increase dimensions as requested
+            dlg.resize(850, 650)
+            dlg.setMinimumWidth(800)
+            dlg.setMinimumHeight(600)
+            
+            # Scroll Area for long content
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            
+            content_widget = QWidget()
+            content_layout = QVBoxLayout(content_widget)
+            content_layout.setContentsMargins(10, 10, 10, 10)
+            
+            text = QTextEdit()
+            text.setReadOnly(True)
+            text.setHtml(msg)
+            text.setStyleSheet("background-color: transparent; border: none; padding: 5px;")
+            # Disable text edit's own scrollbar to use QScrollArea
+            text.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            
+            content_layout.addWidget(text)
+            scroll.setWidget(content_widget)
+            
+            dlg.content_layout.addWidget(scroll)
+            
+            btns = QHBoxLayout()
+            copy_btn = QPushButton("📋 Скопировать данные")
+            copy_btn.setFixedHeight(40)
+            copy_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            copy_btn.clicked.connect(lambda: [QApplication.clipboard().setText(text.toPlainText()), QMessageBox.information(dlg, "Успех", "Данные системы успешно скопированы!")])
+            
+            update_btn = QPushButton("🔄 Проверить обновления")
+            update_btn.setFixedHeight(40)
+            update_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            update_btn.setStyleSheet("background-color: #2980b9; color: white; font-weight: bold; border-radius: 8px;")
+            update_btn.clicked.connect(lambda: [dlg.accept(), self.nav_group.button(1).click(), self.on_check_update()])
+            
+            close_btn = QPushButton("Закрыть")
+            close_btn.setFixedHeight(40)
+            close_btn.clicked.connect(dlg.accept)
+            
+            btns.addWidget(copy_btn)
+            btns.addWidget(update_btn)
+            btns.addWidget(close_btn)
+            dlg.content_layout.addLayout(btns)
+            dlg.exec()
+        except Exception as e:
+            logging.error(f"Failed to show changelog: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Не удалось открыть историю изменений: {e}")
 
     def show_faq(self):
-        faq = """<b>FAQ - Часто задаваемые вопросы:</b><br><br>
-        <b>Q: Как изменить тему оформления?</b><br>
-        A: Перейдите в Настройки -> Основные -> Тема оформления.<br><br>
-        <b>Q: Где хранятся мои данные?</b><br>
-        A: Путь к данным указан во вкладке 'Основные' в блоке 'Путь к данным'.<br><br>
-        <b>Q: Как сбросить HWID?</b><br>
-        A: Обратитесь в поддержку через вкладку 'Связь'.<br><br>
-        <b>Q: Бот не нажимает клавиши, что делать?</b><br>
-        A: Запустите программу от имени администратора.<br><br>
-        <b>Q: Какие есть горячие клавиши?</b><br>
-        A: <b>F7</b> - Открыть/развернуть меню приложения, <b>F8</b> - Мгновенная очистка временных файлов (кэш, логи, TEMP).<br><br>
-        <b>Q: Что именно очищает F8?</b><br>
-        A: На Windows: %TEMP%, Prefetch, Recent, кэш Chrome. На macOS/Linux: системные и пользовательские кэши и логи. Также очищается корзина."""
-        QMessageBox.information(self, "FAQ", faq)
+        logging.info("Opening FAQ Dialog...")
+        try:
+            faq = f"""<div style='font-family: Segoe UI, sans-serif; line-height: 160%; color: #ecf0f1;'>
+            <h2 style='color: #2ecc71; margin-bottom: 20px;'>📖 База знаний и возможности MoneyTracker</h2>
+            
+            <div style='margin-bottom: 25px;'>
+                <h3 style='color: #3498db; margin-bottom: 10px;'>🎯 Назначение системы</h3>
+                <p style='color: #bdc3c7; margin-top: 0;'>MoneyTracker — это мощная экосистема для глубокого мониторинга, автоматизации рутины и профессиональной аналитики игровых финансов. Мы помогаем экономить время, превращая сложные расчеты в наглядные графики.</p>
+            </div>
+
+            <div style='margin-bottom: 25px;'>
+                <h3 style='color: #2ecc71; margin-bottom: 10px;'>🚀 Ключевые возможности</h3>
+                <table style='width: 100%; color: #ecf0f1; border-spacing: 0 10px;'>
+                    <tr><td style='width: 40px;'>📥</td><td><b>Импорт/Экспорт:</b> Мгновенный перенос профилей (JSON) и отчетов (CSV).</td></tr>
+                    <tr><td>💾</td><td><b>Автосохранение:</b> Фоновая защита данных каждые 5 минут.</td></tr>
+                    <tr><td>⌨</td><td><b>Hotkeys:</b> F7 для управления интерфейсом и очистки мусора.</td></tr>
+                    <tr><td>📊</td><td><b>Аналитика:</b> Расчет окупаемости, налогов и чистой прибыли.</td></tr>
+                    <tr><td>🛡️</td><td><b>Безопасность:</b> Привязка к железу (HWID) и шифрование базы.</td></tr>
+                </table>
+            </div>
+
+            <div style='margin-bottom: 25px;'>
+                <h3 style='color: #f1c40f; margin-bottom: 10px;'>💻 Системные требования</h3>
+                <div style='background: rgba(0,0,0,0.2); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05);'>
+                    <ul style='color: #bdc3c7; margin: 0; padding-left: 20px;'>
+                        <li><b>Процессор:</b> 2 ядра (рекомендовано 4+)</li>
+                        <li><b>ОЗУ:</b> 4 ГБ доступно (рекомендовано 8 ГБ)</li>
+                        <li><b>ОС:</b> Windows 10/11 x64 (версия 19041 и выше)</li>
+                        <li><b>Экран:</b> от 1280x720 (поддержка 4K масштабирования)</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div style='background: #2c3e50; padding: 20px; border-radius: 12px; border: 1px solid #34495e;'>
+                <p style='color: #ecf0f1; margin: 0; font-size: 15px;'><b>🔗 Полезные ссылки:</b><br><br>
+                • <a href='https://github.com/Dargon1999/perekyp/wiki' style='color: #3498db; text-decoration: none;'>Официальная Википедия проекта</a><br>
+                • <a href='#' style='color: #3498db; text-decoration: none;'>Видео-инструкции по настройке</a></p>
+            </div>
+            </div>"""
+            
+            dlg = StyledDialogBase(self, "Документация и возможности")
+            dlg.resize(850, 700)
+            dlg.setMinimumWidth(800)
+            dlg.setMinimumHeight(600)
+            
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            
+            content_widget = QWidget()
+            content_layout = QVBoxLayout(content_widget)
+            
+            text = QTextEdit()
+            text.setReadOnly(True)
+            text.setHtml(faq)
+            text.setStyleSheet("background-color: transparent; border: none; padding: 10px;")
+            text.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            
+            content_layout.addWidget(text)
+            scroll.setWidget(content_widget)
+            
+            dlg.content_layout.addWidget(scroll)
+            
+            btns = QHBoxLayout()
+            copy_btn = QPushButton("📋 Скопировать текст")
+            copy_btn.setFixedHeight(40)
+            copy_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            copy_btn.clicked.connect(lambda: [QApplication.clipboard().setText(text.toPlainText()), QMessageBox.information(dlg, "Успех", "Описание успешно скопировано в буфер обмена!")])
+            
+            close_btn = QPushButton("Закрыть")
+            close_btn.setFixedHeight(40)
+            close_btn.clicked.connect(dlg.accept)
+            
+            btns.addWidget(copy_btn)
+            btns.addStretch()
+            btns.addWidget(close_btn)
+            dlg.content_layout.addLayout(btns)
+            dlg.exec()
+        except Exception as e:
+            logging.error(f"Failed to show FAQ: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Не удалось открыть FAQ: {e}")
 
     def _add_info_section(self, parent_layout, title, items):
         section_frame = QFrame()

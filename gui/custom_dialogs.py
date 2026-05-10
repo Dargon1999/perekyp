@@ -230,6 +230,10 @@ class StyledDialogBase(ResizeMixin, QDialog):
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         
+        # Internal state for maximization
+        self._is_maximized = False
+        self._normal_geometry = None
+
         # Reduced default size and set minimum
         target_width = int(width * 0.7) if width > 320 else width
         if target_width < 320: target_width = 320
@@ -294,25 +298,117 @@ class StyledDialogBase(ResizeMixin, QDialog):
                 border-radius: 8px;
                 padding: 8px;
             }}
+            QScrollArea {{
+                border: none;
+                background: transparent;
+            }}
+            QScrollBar:vertical {{
+                border: none;
+                background: transparent;
+                width: 8px;
+                margin: 0;
+            }}
+            QScrollBar::handle:vertical {{
+                background: rgba(255, 255, 255, 0.1);
+                min-height: 20px;
+                border-radius: 4px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: rgba(255, 255, 255, 0.2);
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0;
+            }}
         """)
         
         self.layout.addWidget(self.container)
         
         self.content_layout = QVBoxLayout(self.container)
-        self.content_layout.setContentsMargins(25, 25, 25, 25)
+        self.content_layout.setContentsMargins(25, 20, 25, 25)
         self.content_layout.setSpacing(20)
         
-        # Header (Title + Close Button)
-        header_layout = QHBoxLayout()
+        # Header (Title + Window Actions)
+        self.header_layout = QHBoxLayout()
+        self.header_layout.setContentsMargins(0, 0, 0, 5)
         
         title_lbl = QLabel(title)
         title_lbl.setStyleSheet(f"color: {self.text_color}; font-size: 20px; font-weight: bold;")
-        header_layout.addWidget(title_lbl)
-        header_layout.addStretch()
+        self.header_layout.addWidget(title_lbl)
+        self.header_layout.addStretch()
         
-        # Optional: Add close button X in top right if needed, but usually actions are at bottom
+        # Window Action Buttons
+        self.btn_maximize = QPushButton("▢")
+        self.btn_maximize.setToolTip("Развернуть")
+        self.btn_maximize.setFixedSize(30, 30)
+        self.btn_maximize.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_maximize.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                color: {self.secondary_text_color};
+                font-size: 16px;
+                border-radius: 6px;
+            }}
+            QPushButton:hover {{
+                background: rgba(255,255,255,0.1);
+                color: white;
+            }}
+        """)
+        self.btn_maximize.clicked.connect(self.toggle_maximize)
+        self.header_layout.addWidget(self.btn_maximize)
         
-        self.content_layout.addLayout(header_layout)
+        self.btn_close_top = QPushButton("✕")
+        self.btn_close_top.setToolTip("Закрыть")
+        self.btn_close_top.setFixedSize(30, 30)
+        self.btn_close_top.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_close_top.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                color: {self.secondary_text_color};
+                font-size: 16px;
+                border-radius: 6px;
+            }}
+            QPushButton:hover {{
+                background: {self.danger_color};
+                color: white;
+            }}
+        """)
+        self.btn_close_top.clicked.connect(self.reject)
+        self.header_layout.addWidget(self.btn_close_top)
+        
+        self.content_layout.addLayout(self.header_layout)
+
+    def toggle_maximize(self):
+        screen = QApplication.primaryScreen()
+        if not screen: return
+        
+        available_geo = screen.availableGeometry()
+        
+        if not self._is_maximized:
+            # Maximize
+            self._normal_geometry = self.geometry()
+            self.setGeometry(available_geo)
+            self.btn_maximize.setText("❐")
+            self.btn_maximize.setToolTip("Восстановить")
+            self._is_maximized = True
+            self.set_resizable(False)
+            self.container.setStyleSheet(self.container.styleSheet().replace("border-radius: 12px;", "border-radius: 0px;"))
+        else:
+            # Restore
+            if self._normal_geometry:
+                self.setGeometry(self._normal_geometry)
+            else:
+                # Fallback if no geometry saved
+                w, h = 800, 600
+                self.setGeometry(
+                    available_geo.x() + (available_geo.width() - w) // 2,
+                    available_geo.y() + (available_geo.height() - h) // 2,
+                    w, h
+                )
+            self.btn_maximize.setText("▢")
+            self.btn_maximize.setToolTip("Развернуть")
+            self._is_maximized = False
+            self.set_resizable(True)
+            self.container.setStyleSheet(self.container.styleSheet().replace("border-radius: 0px;", "border-radius: 12px;"))
 
     def showEvent(self, event):
         # Animate container appearance
